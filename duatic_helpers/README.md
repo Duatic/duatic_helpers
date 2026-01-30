@@ -1,1 +1,0 @@
-# duatic_helpers

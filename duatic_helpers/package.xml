@@ -3,9 +3,9 @@
 <package format="3">
   <name>duatic_helpers</name>
   <version>0.0.0</version>
-  <description>Reusable helpers.</description>
+  <description>Reusable helpers</description>
   <maintainer email="skaehler@duatic.com">Sven Kähler</maintainer>
-  <license>Duatic</license>
+  <license>BSD 3-Clause</license>
 
   <exec_depend>launch</exec_depend>
 
