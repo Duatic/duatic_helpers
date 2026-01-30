@@ -6,7 +6,7 @@
   <description>Reusable helpers.</description>
   <maintainer email="skaehler@duatic.com">Sven Kähler</maintainer>
   <license>Duatic</license>
-
+  
   <exec_depend>launch</exec_depend>
 
   <export>
