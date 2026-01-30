@@ -13,11 +13,10 @@ on:
 
 jobs:
   humble_binary_main:
+    timeout-minutes: 60
     uses: ./.github/workflows/reusable_ici.yml
     with:
       ros_distro: humble
       ros_repo: main
       upstream_workspace: ''
       ref_for_scheduled_build: main
-    secrets:
-      token: ${{ secrets.CI_PAT }}
