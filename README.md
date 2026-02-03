@@ -4,7 +4,7 @@ This repository contains ros2 related helper scripts used at [Duatic](https://du
 
 # License
 
-The contents are licensed under the BSD-3-Clause  [license](LICENSE).\
+The contents are licensed under the BSD-3-Clause  [license](LICENSE), note that some files are under a different license (Apache 2.0).\
 Images in this repository are to be licensed separately if you want to use them for any other usecase than forking this repository. Please open an issue in order to get in touch with us.
 
 # Contributing
