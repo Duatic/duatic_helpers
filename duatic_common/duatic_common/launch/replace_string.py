@@ -60,13 +60,12 @@ class ReplaceString(launch.Substitution):
 
         # import here to avoid loop
 
-        self.__source_file: list[launch.Substitution] = \
-            normalize_to_list_of_substitutions(source_file)
+        self.__source_file: list[launch.Substitution] = normalize_to_list_of_substitutions(
+            source_file
+        )
         self.__replacements = {}
         for key in replacements:
-            self.__replacements[key] = normalize_to_list_of_substitutions(
-                replacements[key]
-            )
+            self.__replacements[key] = normalize_to_list_of_substitutions(replacements[key])
         self.__condition = condition
 
     @property
@@ -81,20 +80,18 @@ class ReplaceString(launch.Substitution):
 
     def describe(self) -> str:
         """Return a description of this substitution as a string."""
-        return ''
+        return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
-        yaml_filename: str = launch.utilities.perform_substitutions(
-            context, self.name
-        )
+        yaml_filename: str = launch.utilities.perform_substitutions(context, self.name)
         if self.__condition is None or self.__condition.evaluate(context):
-            output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            output_file = tempfile.NamedTemporaryFile(mode="w", delete=False)
             replacements = self.resolve_replacements(context)
             try:
                 input_file = open(yaml_filename)
                 self.replace(input_file, output_file, replacements)
             except Exception as err:  # noqa: B902
-                print('ReplaceString substitution error: ', err)
+                print("ReplaceString substitution error: ", err)
             finally:
                 input_file.close()
                 output_file.close()
@@ -110,8 +107,9 @@ class ReplaceString(launch.Substitution):
             )
         return resolved_replacements
 
-    def replace(self, input_file: IO[str], output_file: IO[str],
-                replacements: dict[str, str]) -> None:
+    def replace(
+        self, input_file: IO[str], output_file: IO[str], replacements: dict[str, str]
+    ) -> None:
         for line in input_file:
             for key, value in replacements.items():
                 if isinstance(key, str) and isinstance(value, str):
@@ -119,7 +117,7 @@ class ReplaceString(launch.Substitution):
                         line = line.replace(key, value)
                 else:
                     raise TypeError(
-                        'A provided replacement pair is not a string. Both key and value should be'
-                        'strings.'
+                        "A provided replacement pair is not a string. Both key and value should be"
+                        "strings."
                     )
             output_file.write(line)

@@ -89,22 +89,19 @@ class RewrittenYaml(launch.Substitution):
         # import here to avoid loop
         from launch.utilities import normalize_to_list_of_substitutions
 
-        self.__source_file: list[launch.Substitution] = \
-            normalize_to_list_of_substitutions(source_file)
+        self.__source_file: list[launch.Substitution] = normalize_to_list_of_substitutions(
+            source_file
+        )
         self.__param_rewrites = {}
         self.__key_rewrites = {}
         self.__value_rewrites = {}
         self.__convert_types = convert_types
         self.__root_key = None
         for key in param_rewrites:
-            self.__param_rewrites[key] = normalize_to_list_of_substitutions(
-                param_rewrites[key]
-            )
+            self.__param_rewrites[key] = normalize_to_list_of_substitutions(param_rewrites[key])
         if key_rewrites is not None:
             for key in key_rewrites:
-                self.__key_rewrites[key] = normalize_to_list_of_substitutions(
-                    key_rewrites[key]
-                )
+                self.__key_rewrites[key] = normalize_to_list_of_substitutions(key_rewrites[key])
         if value_rewrites is not None:
             for value in value_rewrites:
                 self.__value_rewrites[value] = normalize_to_list_of_substitutions(
@@ -120,14 +117,14 @@ class RewrittenYaml(launch.Substitution):
 
     def describe(self) -> str:
         """Return a description of this substitution as a string."""
-        return ''
+        return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
         yaml_filename = launch.utilities.perform_substitutions(context, self.name)
-        rewritten_yaml = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        rewritten_yaml = tempfile.NamedTemporaryFile(mode="w", delete=False)
         param_rewrites, keys_rewrites, value_rewrites = self.resolve_rewrites(context)
 
-        with open(yaml_filename, 'r') as yaml_file:
+        with open(yaml_filename) as yaml_file:
             data = yaml.safe_load(yaml_file)
 
         self.substitute_params(data, param_rewrites)
@@ -142,8 +139,9 @@ class RewrittenYaml(launch.Substitution):
         rewritten_yaml.close()
         return rewritten_yaml.name
 
-    def resolve_rewrites(self, context: launch.LaunchContext) -> \
-            tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    def resolve_rewrites(
+        self, context: launch.LaunchContext
+    ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
         resolved_params = {}
         for key in self.__param_rewrites:
             resolved_params[key] = launch.utilities.perform_substitutions(
@@ -161,8 +159,7 @@ class RewrittenYaml(launch.Substitution):
             )
         return resolved_params, resolved_keys, resolved_values
 
-    def substitute_params(self, yaml: dict[str, YamlValue],
-                          param_rewrites: dict[str, str]) -> None:
+    def substitute_params(self, yaml: dict[str, YamlValue], param_rewrites: dict[str, str]) -> None:
         # substitute leaf-only parameters
         for key in self.getYamlLeafKeys(yaml):
             if key.key() in param_rewrites:
@@ -175,23 +172,20 @@ class RewrittenYaml(launch.Substitution):
             if path in param_rewrites:
                 # this is an absolute path (ex. 'key.keyA.keyB.val')
                 rewrite_val = self.convert(param_rewrites[path])
-                yaml_keys = path.split('.')
+                yaml_keys = path.split(".")
                 yaml = self.updateYamlPathVals(yaml, yaml_keys, rewrite_val)
 
-    def add_params(self, yaml: dict[str, YamlValue],
-                   param_rewrites: dict[str, str]) -> None:
+    def add_params(self, yaml: dict[str, YamlValue], param_rewrites: dict[str, str]) -> None:
         # add new total path parameters
         yaml_paths = self.pathify(yaml)
         for path in param_rewrites:
             if not path in yaml_paths:  # noqa: E713
                 new_val = self.convert(param_rewrites[path])
-                yaml_keys = path.split('.')
-                if 'ros__parameters' in yaml_keys:
+                yaml_keys = path.split(".")
+                if "ros__parameters" in yaml_keys:
                     yaml = self.updateYamlPathVals(yaml, yaml_keys, new_val)
 
-    def substitute_values(
-            self, yaml: dict[str, YamlValue],
-            value_rewrites: dict[str, str]) -> None:
+    def substitute_values(self, yaml: dict[str, YamlValue], value_rewrites: dict[str, str]) -> None:
 
         def process_value(value: YamlValue) -> YamlValue:
             if isinstance(value, dict):
@@ -208,8 +202,8 @@ class RewrittenYaml(launch.Substitution):
             yaml[key] = process_value(yaml[key])
 
     def updateYamlPathVals(
-            self, yaml: dict[str, YamlValue],
-            yaml_key_list: list[str], rewrite_val: YamlValue) -> dict[str, YamlValue]:
+        self, yaml: dict[str, YamlValue], yaml_key_list: list[str], rewrite_val: YamlValue
+    ) -> dict[str, YamlValue]:
 
         for key in yaml_key_list:
             if key == yaml_key_list[-1]:
@@ -217,19 +211,14 @@ class RewrittenYaml(launch.Substitution):
                 break
             key = yaml_key_list.pop(0)
             if isinstance(yaml, list):
-                yaml[int(key)] = self.updateYamlPathVals(
-                    yaml[int(key)], yaml_key_list, rewrite_val
-                )
+                yaml[int(key)] = self.updateYamlPathVals(yaml[int(key)], yaml_key_list, rewrite_val)
             else:
                 yaml[key] = self.updateYamlPathVals(  # type: ignore[assignment]
-                    yaml.get(key, {}),  # type: ignore[arg-type]
-                    yaml_key_list,
-                    rewrite_val
+                    yaml.get(key, {}), yaml_key_list, rewrite_val  # type: ignore[arg-type]
                 )
         return yaml
 
-    def substitute_keys(
-            self, yaml: dict[str, YamlValue], key_rewrites: dict[str, str]) -> None:
+    def substitute_keys(self, yaml: dict[str, YamlValue], key_rewrites: dict[str, str]) -> None:
         if len(key_rewrites) != 0:
             for key in list(yaml.keys()):
                 val = yaml[key]
@@ -240,8 +229,9 @@ class RewrittenYaml(launch.Substitution):
                 if isinstance(val, dict):
                     self.substitute_keys(val, key_rewrites)
 
-    def getYamlLeafKeys(self, yamlData: dict[str, YamlValue]) -> \
-            Generator[DictItemReference, None, None]:
+    def getYamlLeafKeys(
+        self, yamlData: dict[str, YamlValue]
+    ) -> Generator[DictItemReference, None, None]:
         if not isinstance(yamlData, dict):
             return
 
@@ -255,18 +245,20 @@ class RewrittenYaml(launch.Substitution):
             yield DictItemReference(yamlData, key)
 
     def pathify(
-            self, d: Union[dict[str, YamlValue], list[YamlValue], YamlValue],
-            p: Optional[str] = None,
-            paths: Optional[dict[str, YamlValue]] = None,
-            joinchar: str = '.') -> dict[str, YamlValue]:
+        self,
+        d: Union[dict[str, YamlValue], list[YamlValue], YamlValue],
+        p: Optional[str] = None,
+        paths: Optional[dict[str, YamlValue]] = None,
+        joinchar: str = ".",
+    ) -> dict[str, YamlValue]:
         if p is None:
             paths = {}
-            self.pathify(d, '', paths, joinchar=joinchar)
+            self.pathify(d, "", paths, joinchar=joinchar)
             return paths
 
         assert paths is not None
         pn = p
-        if p != '':
+        if p != "":
             pn += joinchar
         if isinstance(d, dict):
             for k in d:
@@ -283,14 +275,14 @@ class RewrittenYaml(launch.Substitution):
         if self.__convert_types:
             # try converting to int or float
             try:
-                return float(text_value) if '.' in text_value else int(text_value)
+                return float(text_value) if "." in text_value else int(text_value)
             except ValueError:
                 pass
 
         # try converting to bool
-        if text_value.lower() == 'true':
+        if text_value.lower() == "true":
             return True
-        if text_value.lower() == 'false':
+        if text_value.lower() == "false":
             return False
 
         # nothing else worked so fall through and return text

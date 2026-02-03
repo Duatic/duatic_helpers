@@ -55,9 +55,9 @@ class LaunchConfigAsBool(launch.Substitution):
 
     def perform(self, context: LaunchContext) -> str:
         value = perform_substitutions(context, [self._config])
-        if value.strip().lower() in ['true', '1', 'yes', 'on']:
-            return 'True'
-        return 'False'
+        if value.strip().lower() in ["true", "1", "yes", "on"]:
+            return "True"
+        return "False"
 
     def describe(self) -> str:
-        return f'LaunchConfigAsBool({self._config.describe()})'
+        return f"LaunchConfigAsBool({self._config.describe()})"

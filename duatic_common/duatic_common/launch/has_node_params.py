@@ -46,9 +46,7 @@ class HasNodeParams(launch.Substitution):
     Used in launch system
     """
 
-    def __init__(
-        self, source_file: launch.SomeSubstitutionsType, node_name: str
-    ) -> None:
+    def __init__(self, source_file: launch.SomeSubstitutionsType, node_name: str) -> None:
         super().__init__()
         """
     Construct the substitution
@@ -60,8 +58,9 @@ class HasNodeParams(launch.Substitution):
         # import here to avoid loop
         from launch.utilities import normalize_to_list_of_substitutions
 
-        self.__source_file: list[launch.Substitution] = \
-            normalize_to_list_of_substitutions(source_file)
+        self.__source_file: list[launch.Substitution] = normalize_to_list_of_substitutions(
+            source_file
+        )
         self.__node_name = node_name
 
     @property
@@ -71,12 +70,12 @@ class HasNodeParams(launch.Substitution):
 
     def describe(self) -> str:
         """Return a description of this substitution as a string."""
-        return ''
+        return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
         yaml_filename = launch.utilities.perform_substitutions(context, self.name)
         data = yaml.safe_load(open(yaml_filename))
 
         if self.__node_name in data.keys():
-            return 'True'
-        return 'False'
+            return "True"
+        return "False"
