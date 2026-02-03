@@ -5,7 +5,6 @@
   <version>1.4.0</version>
   <description>Common support functionality used throughout duatic stack, a fork of nav2_common</description>
   <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
-  <license>Apache 2.0</license>
   <license>BSD 3-Clause</license>
 
   <depend>backward_ros</depend>
