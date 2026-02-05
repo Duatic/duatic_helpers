@@ -4,7 +4,6 @@ project(duatic_common NONE)
 
 find_package(ament_cmake_core REQUIRED)
 find_package(ament_cmake_python REQUIRED)
-find_package(backward_ros REQUIRED)
 
 ament_python_install_package(duatic_common)
 
