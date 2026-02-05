@@ -12,6 +12,8 @@ ament_package(
   CONFIG_EXTRAS "duatic_common-extras.cmake"
 )
 
+include(cmake/duatic_package.cmake)
+
 install(
   DIRECTORY cmake
   DESTINATION share/${PROJECT_NAME}
