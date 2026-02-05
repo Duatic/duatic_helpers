@@ -7,7 +7,6 @@
   <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
   <license>BSD 3-Clause</license>
 
-  <depend>backward_ros</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
   <depend>osrf_pycommon</depend>
