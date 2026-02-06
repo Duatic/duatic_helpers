@@ -9,7 +9,7 @@ on:
       - main
   schedule:
     # Run every morning to detect flakiness and broken dependencies
-    - cron: '13 4 * * 0'
+    - cron: '13 4 * * *'
 
 jobs:
   jazzy_binary_main:
