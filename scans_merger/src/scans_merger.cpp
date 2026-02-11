@@ -1,6 +1,17 @@
-#include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <pcl_ros/transforms.hpp>
+// Copyright (c) Ibrahim Hroob
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <tf2_ros/transform_listener.h>
@@ -8,8 +19,11 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/synchronizer.h>
+#include <pcl_ros/transforms.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <rclcpp/qos.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 class CloudMergerNode : public rclcpp::Node
 {
@@ -28,7 +42,7 @@ public:
         input_cloud_2_ = this->get_parameter("input_cloud_2").as_string();
         merged_cloud_ = this->get_parameter("merged_cloud").as_string();
 
-        RCLCPP_INFO(this->get_logger(), "Parameters loaded: destination_frame=%s, input_cloud_1=%s, input_cloud_2=%s, merged_cloud=%s",
+        RCLCPP_INFO(this->get_logger(), "Parameters loaded: destination_frame=%s, input_cloud_1=%s, input_cloud_2=%s, merged_cloud=%s",  // NOLINT(whitespace/line_length)
                      destination_frame_.c_str(), input_cloud_1_.c_str(), input_cloud_2_.c_str(), merged_cloud_.c_str());
 
         // Set up message filters for synchronization
@@ -37,7 +51,7 @@ public:
         cloud_sub_2_.subscribe(this, input_cloud_2_, qos_sub.get_rmw_qos_profile());
 
         sync_.reset(new Sync(SyncPolicy(10), cloud_sub_1_, cloud_sub_2_));
-        sync_->registerCallback(std::bind(&CloudMergerNode::syncCallback, this, std::placeholders::_1, std::placeholders::_2));
+        sync_->registerCallback(std::bind(&CloudMergerNode::syncCallback, this, std::placeholders::_1, std::placeholders::_2));  // NOLINT(whitespace/line_length)
 
         RCLCPP_INFO(this->get_logger(), "Cloud subscriptions set up.");
 
@@ -82,21 +96,19 @@ private:
 
             // Publish the merged cloud
             merged_cloud_pub_->publish(std::move(output_cloud));
-            
+
             auto end = this->get_clock()->now();
-            
-            RCLCPP_DEBUG(this->get_logger(), 
-                "Merged | %s: %zu, %s: %zu, total: %zu | Time: %f sec", 
-                    input_cloud_1_.c_str(), 
-                    pcl_cloud_1.size(), 
-                    input_cloud_2_.c_str(), 
-                    pcl_cloud_2.size(), 
-                    merged_cloud.size(), 
+
+            RCLCPP_DEBUG(this->get_logger(),
+                "Merged | %s: %zu, %s: %zu, total: %zu | Time: %f sec",
+                    input_cloud_1_.c_str(),
+                    pcl_cloud_1.size(),
+                    input_cloud_2_.c_str(),
+                    pcl_cloud_2.size(),
+                    merged_cloud.size(),
                     (end - start).seconds()
                 );
-        }
-        else
-        {
+        } else {
             RCLCPP_WARN(this->get_logger(), "Cloud transformation failed.");
             return;
         }
@@ -108,7 +120,7 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Transforming cloud from frame %s to %s",
                      input_cloud.header.frame_id.c_str(), destination_frame_.c_str());
 
-        if (!tf_buffer_->canTransform(destination_frame_, input_cloud.header.frame_id, tf2::TimePointZero, tf2::durationFromSec(0.05)))
+        if (!tf_buffer_->canTransform(destination_frame_, input_cloud.header.frame_id, tf2::TimePointZero, tf2::durationFromSec(0.05)))  // NOLINT(whitespace/line_length)
         {
             RCLCPP_WARN(this->get_logger(), "Transform not available from %s to %s",
                         input_cloud.header.frame_id.c_str(), destination_frame_.c_str());
@@ -135,7 +147,7 @@ private:
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_1_;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_2_;
 
-    using SyncPolicy = message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>;
+    using SyncPolicy = message_filters::sync_policies::ApproximateTime<sensor_msgs::msg::PointCloud2, sensor_msgs::msg::PointCloud2>;  // NOLINT(whitespace/line_length)
     using Sync = message_filters::Synchronizer<SyncPolicy>;
     std::shared_ptr<Sync> sync_;
 
