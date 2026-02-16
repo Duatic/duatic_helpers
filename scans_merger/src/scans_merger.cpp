@@ -1,29 +1,22 @@
 // Copyright (c) Ibrahim Hroob
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0
+// (2025) Updated to ROS 2 Rolling/Jazzy by Marc Blöchlinger
 
 #include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/buffer.h>
-#include <message_filters/subscriber.h>
-#include <message_filters/sync_policies/approximate_time.h>
-#include <message_filters/synchronizer.h>
+#include <tf2_ros/transform_listener.hpp>
+#include <tf2_ros/buffer.hpp>
+#include <message_filters/subscriber.hpp>
+#include <message_filters/sync_policies/approximate_time.hpp>
+#include <message_filters/synchronizer.hpp>
 #include <pcl_ros/transforms.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include <rclcpp/qos.hpp>
 #include <rclcpp/rclcpp.hpp>
+
+// Define a consistent Point Type
+typedef pcl::PointXYZI PointType;
 
 class CloudMergerNode : public rclcpp::Node
 {
@@ -45,19 +38,26 @@ public:
         RCLCPP_INFO(this->get_logger(), "Parameters loaded: destination_frame=%s, input_cloud_1=%s, input_cloud_2=%s, merged_cloud=%s",  // NOLINT(whitespace/line_length)
                      destination_frame_.c_str(), input_cloud_1_.c_str(), input_cloud_2_.c_str(), merged_cloud_.c_str());
 
-        // Set up message filters for synchronization
+        // QoS Setup
         rclcpp::QoS qos_sub = rclcpp::QoS(rclcpp::SensorDataQoS());
+
+#ifdef ROS_DISTRO_ROLLING
+        // Rolling/Kilted API: Pass rclcpp::QoS object directly
+        cloud_sub_1_.subscribe(this, input_cloud_1_, qos_sub);
+        cloud_sub_2_.subscribe(this, input_cloud_2_, qos_sub);
+#else
+        // Jazzy API: Pass rmw_qos_profile_t struct
         cloud_sub_1_.subscribe(this, input_cloud_1_, qos_sub.get_rmw_qos_profile());
         cloud_sub_2_.subscribe(this, input_cloud_2_, qos_sub.get_rmw_qos_profile());
+#endif
 
-        sync_.reset(new Sync(SyncPolicy(10), cloud_sub_1_, cloud_sub_2_));
+        sync_ = std::make_shared<Sync>(SyncPolicy(10), cloud_sub_1_, cloud_sub_2_);
         sync_->registerCallback(std::bind(&CloudMergerNode::syncCallback, this, std::placeholders::_1, std::placeholders::_2));  // NOLINT(whitespace/line_length)
 
         RCLCPP_INFO(this->get_logger(), "Cloud subscriptions set up.");
 
-        // Publisher for the merged point cloud
-        rclcpp::QoS qos = rclcpp::QoS(10);  // Adjust queue size based on your system's need
-        qos.best_effort();  // Ensure it matches the reliability requirements
+        rclcpp::QoS qos = rclcpp::QoS(10);
+        qos.best_effort();
         merged_cloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(merged_cloud_, qos);
 
         // Initialize the TF2 buffer and listener
@@ -76,64 +76,58 @@ private:
 
         auto start = this->get_clock()->now();
 
-        if (transformCloudToTargetFrame(*cloud1, transformed_cloud_1) &&
-            transformCloudToTargetFrame(*cloud2, transformed_cloud_2))
+        // Check transforms
+        if (!transformCloudToTargetFrame(*cloud1, transformed_cloud_1) ||
+            !transformCloudToTargetFrame(*cloud2, transformed_cloud_2))
         {
-            // Convert ROS PointCloud2 messages to PCL types
-            pcl::PointCloud<pcl::PointXYZI> pcl_cloud_1;
-            pcl::PointCloud<pcl::PointXYZI> pcl_cloud_2;
-            pcl::fromROSMsg(transformed_cloud_1, pcl_cloud_1);
-            pcl::fromROSMsg(transformed_cloud_2, pcl_cloud_2);
-
-            // Merge the clouds
-            pcl::PointCloud<pcl::PointXYZI> merged_cloud = pcl_cloud_1 + pcl_cloud_2;
-
-            // Convert back to ROS PointCloud2
-            sensor_msgs::msg::PointCloud2 output_cloud;
-            pcl::toROSMsg(merged_cloud, output_cloud);
-            output_cloud.header.frame_id = destination_frame_;
-            output_cloud.header.stamp = transformed_cloud_1.header.stamp;
-
-            // Publish the merged cloud
-            merged_cloud_pub_->publish(std::move(output_cloud));
-
-            auto end = this->get_clock()->now();
-
-            RCLCPP_DEBUG(this->get_logger(),
-                "Merged | %s: %zu, %s: %zu, total: %zu | Time: %f sec",
-                    input_cloud_1_.c_str(),
-                    pcl_cloud_1.size(),
-                    input_cloud_2_.c_str(),
-                    pcl_cloud_2.size(),
-                    merged_cloud.size(),
-                    (end - start).seconds()
-                );
-        } else {
             RCLCPP_WARN(this->get_logger(), "Cloud transformation failed.");
             return;
         }
+
+        // Convert to PCL
+        pcl::PointCloud<PointType> pcl_cloud_1;
+        pcl::PointCloud<PointType> pcl_cloud_2;
+        pcl::fromROSMsg(transformed_cloud_1, pcl_cloud_1);
+        pcl::fromROSMsg(transformed_cloud_2, pcl_cloud_2);
+
+        // Merge
+        pcl::PointCloud<PointType> merged_cloud = pcl_cloud_1 + pcl_cloud_2;
+
+        // Convert back to ROS
+        sensor_msgs::msg::PointCloud2 output_cloud;
+        pcl::toROSMsg(merged_cloud, output_cloud);
+        output_cloud.header.frame_id = destination_frame_;
+        output_cloud.header.stamp = transformed_cloud_1.header.stamp;
+
+        merged_cloud_pub_->publish(std::move(output_cloud));
+
+        auto end = this->get_clock()->now();
+
+        RCLCPP_DEBUG(this->get_logger(),
+            "Merged | %s: %zu, %s: %zu, total: %zu | Time: %f sec",
+                input_cloud_1_.c_str(), pcl_cloud_1.size(),
+                input_cloud_2_.c_str(), pcl_cloud_2.size(),
+                merged_cloud.size(), (end - start).seconds()
+            );
     }
 
     bool transformCloudToTargetFrame(const sensor_msgs::msg::PointCloud2 &input_cloud,
                                      sensor_msgs::msg::PointCloud2 &output_cloud)
     {
-        RCLCPP_DEBUG(this->get_logger(), "Transforming cloud from frame %s to %s",
-                     input_cloud.header.frame_id.c_str(), destination_frame_.c_str());
-
-        if (!tf_buffer_->canTransform(destination_frame_, input_cloud.header.frame_id, tf2::TimePointZero, tf2::durationFromSec(0.05)))  // NOLINT(whitespace/line_length)
-        {
-            RCLCPP_WARN(this->get_logger(), "Transform not available from %s to %s",
-                        input_cloud.header.frame_id.c_str(), destination_frame_.c_str());
-            return false;
+        // if already in target frame, just copy
+        if (input_cloud.header.frame_id == destination_frame_) {
+            output_cloud = input_cloud;
+            return true;
         }
 
         try
         {
-            geometry_msgs::msg::TransformStamped transform_stamped = tf_buffer_->lookupTransform(
-                destination_frame_, input_cloud.header.frame_id, tf2::TimePointZero);
-
-            pcl_ros::transformPointCloud(destination_frame_, transform_stamped, input_cloud, output_cloud);
-            RCLCPP_DEBUG(this->get_logger(), "Cloud successfully transformed.");
+            if (!tf_buffer_->canTransform(destination_frame_, input_cloud.header.frame_id, tf2::TimePointZero, tf2::durationFromSec(0.05)))  // NOLINT(whitespace/line_length)
+            {
+                return false;
+            }
+            // Use pcl_ros helper for easier transformation
+            pcl_ros::transformPointCloud(destination_frame_, input_cloud, output_cloud, *tf_buffer_);
             return true;
         }
         catch (tf2::TransformException &ex)
@@ -143,7 +137,6 @@ private:
         }
     }
 
-    // Message filter subscribers
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_1_;
     message_filters::Subscriber<sensor_msgs::msg::PointCloud2> cloud_sub_2_;
 

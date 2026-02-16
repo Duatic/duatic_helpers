@@ -5,7 +5,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
+# --- 1. Detect Rolling/Kilted for Conditional Compilation ---
+if("$ENV{ROS_DISTRO}" STREQUAL "rolling" OR "$ENV{ROS_DISTRO}" STREQUAL "kilted")
+  add_compile_definitions(ROS_DISTRO_ROLLING)
+endif()
+
+# --- 2. Find Dependencies ---
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -15,18 +20,34 @@ find_package(laser_geometry REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(message_filters REQUIRED)
 
 add_executable(scans_merger src/scans_merger.cpp)
 
-ament_target_dependencies(scans_merger
-  rclcpp
-  sensor_msgs
-  pcl_conversions
-  pcl_ros
-  laser_geometry
-  tf2_ros
-  tf2
-  Eigen3
+# --- 3. Link Libraries (Hybrid Approach) ---
+target_link_libraries(scans_merger PUBLIC
+  rclcpp::rclcpp
+  ${sensor_msgs_TARGETS}
+
+  # FIX: Jazzy doesn't have pcl_conversions::pcl_conversions target.
+  # Use the variable instead, which works on all versions.
+  ${pcl_conversions_LIBRARIES}
+
+  laser_geometry::laser_geometry
+  tf2::tf2
+  tf2_ros::tf2_ros
+  Eigen3::Eigen
+  message_filters::message_filters
+
+  pcl_ros::pcl_ros_tf
+  pcl_ros::pcl_ros_filters
+)
+
+# --- 4. Include Directories (Crucial for pcl_conversions) ---
+# Since we didn't link a target for pcl_conversions, we MUST manually add its includes
+target_include_directories(scans_merger PUBLIC
+  ${pcl_conversions_INCLUDE_DIRS}
+  ${Eigen3_INCLUDE_DIRS}
 )
 
 install(TARGETS scans_merger DESTINATION lib/${PROJECT_NAME})
