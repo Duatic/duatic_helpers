@@ -14,6 +14,7 @@
 
 from .has_node_params import HasNodeParams
 from .launch_config_as_bool import LaunchConfigAsBool
+from .launch_helper import simulator_not_subcomponent_condition
 from .replace_string import ReplaceString
 from .rewritten_yaml import RewrittenYaml
 
@@ -22,4 +23,5 @@ __all__ = [
     "LaunchConfigAsBool",
     "RewrittenYaml",
     "ReplaceString",
+    "simulator_not_subcomponent_condition",
 ]
