@@ -18,7 +18,7 @@ from typing import Generator
 
 import launch
 from launch.substitutions import LaunchConfiguration
-from duatic_common.launch import RewrittenYaml
+from duatic_helpers import RewrittenYaml
 import pytest
 import yaml
 

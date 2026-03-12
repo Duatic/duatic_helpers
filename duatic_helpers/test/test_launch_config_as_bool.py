@@ -15,7 +15,7 @@
 import unittest
 
 from launch import LaunchContext
-from duatic_common.launch import LaunchConfigAsBool
+from duatic_helpers import LaunchConfigAsBool
 
 
 class TestLaunchConfigAsBool(unittest.TestCase):

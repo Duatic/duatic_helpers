@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Intel Corporation
+# Copyright 2019 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .has_node_params import HasNodeParams
-from .launch_config_as_bool import LaunchConfigAsBool
-from .replace_string import ReplaceString
-from .rewritten_yaml import RewrittenYaml
+set(AMENT_BUILD_CONFIGURATION_KEYWORD_SEPARATOR ":")
 
-__all__ = [
-    "HasNodeParams",
-    "LaunchConfigAsBool",
-    "RewrittenYaml",
-    "ReplaceString",
-]
+include("${duatic_helpers_DIR}/duatic_package.cmake")
