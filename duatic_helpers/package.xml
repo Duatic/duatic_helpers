@@ -3,7 +3,7 @@
 <package format="3">
   <name>duatic_helpers</name>
   <version>1.4.0</version>
-  <description>Common support functionality used throughout duatic stack, a fork of nav2_common</description>
+  <description>Common support functionality used throughout duatic stack</description>
   <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
   <license>BSD 3-Clause</license>
 
