@@ -14,4 +14,4 @@
 
 set(AMENT_BUILD_CONFIGURATION_KEYWORD_SEPARATOR ":")
 
-include("${duatic_common_DIR}/duatic_package.cmake")
+include("${duatic_helpers_DIR}/duatic_package.cmake")

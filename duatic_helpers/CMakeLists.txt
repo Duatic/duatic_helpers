@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.8)
 
-project(duatic_common NONE)
+project(duatic_helpers NONE)
 
 find_package(ament_cmake_core REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 
-ament_python_install_package(duatic_common)
+ament_python_install_package(duatic_helpers)
 
 ament_package(
-  CONFIG_EXTRAS "duatic_common-extras.cmake"
+  CONFIG_EXTRAS "duatic_helpers-extras.cmake"
 )
 
 include(cmake/duatic_package.cmake)
