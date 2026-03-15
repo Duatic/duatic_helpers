@@ -1,0 +1,12 @@
+# General math
+numpy
+
+# JAX for high-performance automatic differentiation and XLA compilation
+jax
+jaxlib
+
+# URDF parsing
+yourdfpy
+
+# PyRoki: Robot Kinematics Library (directly from GitHub)
+git+https://github.com/dfki-ric/pyroki.git@main
