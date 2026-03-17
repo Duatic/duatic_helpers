@@ -21,13 +21,13 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Cartesian trajectory generators for robot motion planning.
+"""Cartesian waypoint generators for robot motion planning.
 
 Each generator yields (positions, wxyzs, info) tuples representing
 intermediate Cartesian targets along the trajectory path. The caller
 is responsible for IK solving, smoothing, and publishing.
 
-Supported trajectory types:
+Supported generators:
     - linear_waypoints: Straight-line interpolation in Cartesian space
     - arc_waypoints: Circular arc interpolation through a via-point
 """
@@ -41,11 +41,17 @@ def linear_waypoints(
     fixed_wxyzs,
     control_rate=25.0,
     linear_velocity=0.1,
+    max_step_size=0.002,
 ):
     """Generate waypoints along a straight line in Cartesian space.
 
     Orientations remain fixed throughout the motion.
     Both arms move synchronously with the same interpolation parameter.
+
+    The number of waypoints is determined by whichever produces more steps:
+    the velocity-based duration at the given control_rate, or the max_step_size
+    constraint. This ensures the path is followed precisely even at higher
+    velocities or lower control rates.
 
     Args:
         start_positions: (N, 3) start EE positions
@@ -53,6 +59,8 @@ def linear_waypoints(
         fixed_wxyzs: (N, 4) orientations to maintain (wxyz format)
         control_rate: waypoint generation rate in Hz
         linear_velocity: Cartesian velocity in m/s
+        max_step_size: maximum Cartesian distance between consecutive waypoints
+            in meters. Smaller values produce finer resolution. Default 2mm.
 
     Yields:
         (positions, wxyzs, info) — info contains step, n_steps, t
@@ -60,7 +68,14 @@ def linear_waypoints(
     max_dist = float(np.max(np.linalg.norm(target_positions - start_positions, axis=1)))
     duration = max(max_dist / linear_velocity, 0.5) if linear_velocity > 0 else 2.0
     rate_sec = 1.0 / control_rate
-    n_steps = max(int(duration / rate_sec), 1)
+
+    # Steps from velocity + control rate
+    n_steps_rate = max(int(duration / rate_sec), 1)
+
+    # Steps from max step size constraint
+    n_steps_precision = max(int(np.ceil(max_dist / max_step_size)), 1) if max_step_size > 0 else 1
+
+    n_steps = max(n_steps_rate, n_steps_precision)
 
     for step in range(n_steps):
         t = min(1.0, (step + 1) / n_steps)
@@ -149,6 +164,7 @@ def arc_waypoints(
     fixed_wxyzs,
     control_rate=25.0,
     arc_velocity=0.1,
+    max_step_size=0.002,
 ):
     """Generate waypoints along a circular arc in Cartesian space.
 
@@ -165,6 +181,8 @@ def arc_waypoints(
         fixed_wxyzs: (N, 4) orientations to maintain (wxyz format)
         control_rate: waypoint generation rate in Hz
         arc_velocity: Cartesian velocity along the arc in m/s
+        max_step_size: maximum Cartesian distance between consecutive waypoints
+            in meters. Default 2mm.
 
     Yields:
         (positions, wxyzs, info) — info contains step, n_steps, t
@@ -203,7 +221,9 @@ def arc_waypoints(
 
     # Compute duration and step count from longest arc
     duration = max(max_arc_length / arc_velocity, 0.5) if arc_velocity > 0 else 2.0
-    n_steps = max(int(duration / rate_sec), 1)
+    n_steps_rate = max(int(duration / rate_sec), 1)
+    n_steps_precision = max(int(np.ceil(max_arc_length / max_step_size)), 1) if max_step_size > 0 else 1
+    n_steps = max(n_steps_rate, n_steps_precision)
 
     for step in range(n_steps):
         t = min(1.0, (step + 1) / n_steps)
