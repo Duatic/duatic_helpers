@@ -74,12 +74,18 @@ def _solve_ik(
     target_position: jax.Array,
     joint_mask: jax.Array,
     prev_cfg: jax.Array,
+    initial_cfg: jax.Array,
     self_collision_weight: float = 10.0,
     self_collision_margin: float = 0.01,
     limit_margin: float = 0.15,
     limit_margin_weight: float = 5.0,
 ) -> jax.Array:
-    """Solve IK using jaxls least-squares with analytic Jacobian and joint masking."""
+    """Solve IK using jaxls least-squares with analytic Jacobian and joint masking.
+
+    prev_cfg is used as the rest-pose regularization target.
+    initial_cfg is used as the optimization starting point (may differ from prev_cfg
+    to break singularities).
+    """
     joint_var = robot.joint_var_cls(0)
 
     target_pose = jaxlie.SE3.from_rotation_and_translation(jaxlie.SO3(target_wxyz), target_position)
@@ -125,7 +131,7 @@ def _solve_ik(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
-            initial_vals=jaxls.VarValues.make([joint_var.with_value(prev_cfg)]),
+            initial_vals=jaxls.VarValues.make([joint_var.with_value(initial_cfg)]),
         )
     )
     return sol[joint_var]
@@ -158,12 +164,17 @@ def _solve_ik_multi(
     target_positions: jax.Array,
     joint_mask: jax.Array,
     prev_cfg: jax.Array,
+    initial_cfg: jax.Array,
     self_collision_weight: float = 10.0,
     self_collision_margin: float = 0.01,
     limit_margin: float = 0.15,
     limit_margin_weight: float = 5.0,
 ) -> jax.Array:
-    """Solve whole-body IK for multiple targets simultaneously (bimanual pattern)."""
+    """Solve whole-body IK for multiple targets simultaneously (bimanual pattern).
+
+    prev_cfg is used as the rest-pose regularization target.
+    initial_cfg is used as the optimization starting point.
+    """
     JointVar = robot.joint_var_cls
 
     target_pose = jaxlie.SE3.from_rotation_and_translation(
@@ -215,7 +226,7 @@ def _solve_ik_multi(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=10.0),
-            initial_vals=jaxls.VarValues.make([JointVar(0).with_value(prev_cfg)]),
+            initial_vals=jaxls.VarValues.make([JointVar(0).with_value(initial_cfg)]),
         )
     )
     return sol[JointVar(0)]
@@ -231,6 +242,7 @@ class PyrokiIKSolver:
     - Joint masking for decoupled multi-arm control
     - Joint limits as proper constraints (not just clipping)
     - Rest-pose regularization (smooth, stable solutions)
+    - Automatic singularity nudge for near-zero configurations
     """
 
     def __init__(self, urdf_input, self_collision_weight=10.0, self_collision_margin=0.01):
@@ -243,6 +255,35 @@ class PyrokiIKSolver:
         self.joint_names = list(self.robot.joints.actuated_names)
         self.self_collision_weight = self_collision_weight
         self.self_collision_margin = self_collision_margin
+
+        # Pre-identify elbow/shoulder joints for singularity nudging
+        self._elbow_indices = [
+            i for i, n in enumerate(self.joint_names) if "elbow_flexion" in n
+        ]
+        self._shoulder_indices = [
+            i for i, n in enumerate(self.joint_names) if "shoulder_flexion" in n
+        ]
+
+    def _nudge_near_zero(
+        self, cfg: np.ndarray, thresh: float = 0.08,
+        elbow_nudge: float = -0.3, shoulder_nudge: float = 0.2,
+    ) -> np.ndarray:
+        """If cfg is near-zero (singular), nudge elbow/shoulder to help the optimizer.
+
+        Returns a modified copy suitable as initial_cfg. The original prev_cfg
+        should still be used as the rest-pose so the solver doesn't over-commit.
+        """
+        if np.sum(np.abs(cfg) > thresh) > 2:
+            return cfg  # not near-zero, no nudge needed
+        if not self._elbow_indices:
+            return cfg  # no elbow joints to nudge
+
+        nudged = cfg.copy()
+        for i in self._elbow_indices:
+            nudged[i] = elbow_nudge
+        for i in self._shoulder_indices:
+            nudged[i] = shoulder_nudge
+        return nudged
 
     def forward_kinematics(self, joint_cfg, link_names):
         """Compute forward kinematics for given links.
@@ -284,6 +325,9 @@ class PyrokiIKSolver:
 
         target_link_index = self.robot.links.names.index(target_link_name)
 
+        prev_cfg_np = np.asarray(prev_cfg, dtype=np.float32)
+        initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
+
         cfg = _solve_ik(
             self.robot,
             self.robot_coll,
@@ -291,7 +335,8 @@ class PyrokiIKSolver:
             jnp.array(target_wxyz, dtype=jnp.float32),
             jnp.array(target_pos, dtype=jnp.float32),
             jnp.array(joint_mask, dtype=jnp.float32),
-            jnp.array(prev_cfg, dtype=jnp.float32),
+            jnp.array(prev_cfg_np, dtype=jnp.float32),
+            jnp.array(initial_cfg_np, dtype=jnp.float32),
             self_collision_weight=self.self_collision_weight,
             self_collision_margin=self.self_collision_margin,
         )
@@ -336,6 +381,9 @@ class PyrokiIKSolver:
 
         target_link_indices = [self.robot.links.names.index(name) for name in target_link_names]
 
+        prev_cfg_np = np.asarray(prev_cfg, dtype=np.float32)
+        initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
+
         cfg = _solve_ik_multi(
             self.robot,
             self.robot_coll,
@@ -343,7 +391,8 @@ class PyrokiIKSolver:
             jnp.array(target_wxyzs, dtype=jnp.float32),
             jnp.array(target_positions, dtype=jnp.float32),
             jnp.array(joint_mask, dtype=jnp.float32),
-            jnp.array(prev_cfg, dtype=jnp.float32),
+            jnp.array(prev_cfg_np, dtype=jnp.float32),
+            jnp.array(initial_cfg_np, dtype=jnp.float32),
             self_collision_weight=self.self_collision_weight,
             self_collision_margin=self.self_collision_margin,
         )
