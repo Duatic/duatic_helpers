@@ -211,18 +211,22 @@ def arc_waypoints(
             arc_length = abs(sweep) * radius
             max_arc_length = max(max_arc_length, arc_length)
 
-            arcs.append({
-                "center": center,
-                "radius": radius,
-                "u_axis": u_axis,
-                "v_axis": v_axis,
-                "sweep": sweep,
-            })
+            arcs.append(
+                {
+                    "center": center,
+                    "radius": radius,
+                    "u_axis": u_axis,
+                    "v_axis": v_axis,
+                    "sweep": sweep,
+                }
+            )
 
     # Compute duration and step count from longest arc
     duration = max(max_arc_length / arc_velocity, 0.5) if arc_velocity > 0 else 2.0
     n_steps_rate = max(int(duration / rate_sec), 1)
-    n_steps_precision = max(int(np.ceil(max_arc_length / max_step_size)), 1) if max_step_size > 0 else 1
+    n_steps_precision = (
+        max(int(np.ceil(max_arc_length / max_step_size)), 1) if max_step_size > 0 else 1
+    )
     n_steps = max(n_steps_rate, n_steps_precision)
 
     for step in range(n_steps):
@@ -232,9 +236,7 @@ def arc_waypoints(
         for i in range(n_targets):
             if arcs[i] is None:
                 # Linear fallback
-                positions[i] = start_positions[i] + t * (
-                    target_positions[i] - start_positions[i]
-                )
+                positions[i] = start_positions[i] + t * (target_positions[i] - start_positions[i])
             else:
                 arc = arcs[i]
                 angle = t * arc["sweep"]

@@ -34,7 +34,7 @@ import jaxls
 
 def _load_urdf(urdf_input):
     """Load URDF from file path, StringIO, or XML string."""
-    if isinstance(urdf_input, str) and not urdf_input.startswith('<'):
+    if isinstance(urdf_input, str) and not urdf_input.startswith("<"):
         return yourdfpy.URDF.load(urdf_input)
     elif isinstance(urdf_input, io.StringIO):
         return yourdfpy.URDF.load(urdf_input)
@@ -82,9 +82,7 @@ def _solve_ik(
     """Solve IK using jaxls least-squares with analytic Jacobian and joint masking."""
     joint_var = robot.joint_var_cls(0)
 
-    target_pose = jaxlie.SE3.from_rotation_and_translation(
-        jaxlie.SO3(target_wxyz), target_position
-    )
+    target_pose = jaxlie.SE3.from_rotation_and_translation(jaxlie.SO3(target_wxyz), target_position)
 
     costs = [
         pk.costs.pose_cost_analytic_jac(
@@ -144,9 +142,7 @@ def _compute_pose_error(
     """Compute position and orientation error between FK result and target."""
     Ts_world_link = robot.forward_kinematics(joint_cfg)
     actual_pose = jaxlie.SE3(Ts_world_link[target_link_index])
-    target_pose = jaxlie.SE3.from_rotation_and_translation(
-        jaxlie.SO3(target_wxyz), target_position
-    )
+    target_pose = jaxlie.SE3.from_rotation_and_translation(jaxlie.SO3(target_wxyz), target_position)
     pose_error = (actual_pose.inverse() @ target_pose).log()
     pos_err = jnp.linalg.norm(pose_error[:3])
     ori_err = jnp.linalg.norm(pose_error[3:])
@@ -238,7 +234,10 @@ class PyrokiIKSolver:
     """
 
     def __init__(self, urdf_input, self_collision_weight=10.0, self_collision_margin=0.01):
-        urdf_obj = _load_urdf(urdf_input)
+        if isinstance(urdf_input, yourdfpy.URDF):
+            urdf_obj = urdf_input
+        else:
+            urdf_obj = _load_urdf(urdf_input)
         self.robot = pk.Robot.from_urdf(urdf_obj)
         self.robot_coll = pk.collision.RobotCollision.from_urdf(urdf_obj)
         self.joint_names = list(self.robot.joints.actuated_names)
@@ -312,7 +311,9 @@ class PyrokiIKSolver:
 
         return cfg_np, float(pos_err), float(ori_err)
 
-    def solve_multi(self, target_link_names, target_positions, target_wxyzs, prev_cfg, joint_mask=None):
+    def solve_multi(
+        self, target_link_names, target_positions, target_wxyzs, prev_cfg, joint_mask=None
+    ):
         """
         Solve IK for multiple targets simultaneously (whole-body).
 
@@ -333,9 +334,7 @@ class PyrokiIKSolver:
         if joint_mask is None:
             joint_mask = np.ones(n, dtype=np.float32)
 
-        target_link_indices = [
-            self.robot.links.names.index(name) for name in target_link_names
-        ]
+        target_link_indices = [self.robot.links.names.index(name) for name in target_link_names]
 
         cfg = _solve_ik_multi(
             self.robot,
