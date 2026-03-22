@@ -33,9 +33,7 @@ class BatteryAggregatorNode(Node):
         self.declare_parameter("active_batteries", rclpy.Parameter.Type.STRING_ARRAY)
         self.declare_parameter("poll_interval_sec", 5.0)
 
-        self._config_path = Path(
-            os.path.expanduser(self.get_parameter("config_file").value)
-        )
+        self._config_path = Path(os.path.expanduser(self.get_parameter("config_file").value))
         self._interval = self.get_parameter("poll_interval_sec").value
 
         # Load active batteries: parameter > config file > empty (auto-select)
@@ -50,9 +48,7 @@ class BatteryAggregatorNode(Node):
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
-        self._pub = self.create_publisher(
-            BatteryState, "/batteries/rover_main/state", qos
-        )
+        self._pub = self.create_publisher(BatteryState, "/batteries/rover_main/state", qos)
 
         # Timer for topic discovery and publishing
         self._timer = self.create_timer(self._interval, self._tick)
@@ -65,8 +61,7 @@ class BatteryAggregatorNode(Node):
 
         active_str = ", ".join(self._active) if self._active else "auto-select"
         self.get_logger().info(
-            f"Battery aggregator started. Active: [{active_str}], "
-            f"config: {self._config_path}"
+            f"Battery aggregator started. Active: [{active_str}], " f"config: {self._config_path}"
         )
 
     def _load_active_batteries(self) -> list[str]:
@@ -83,9 +78,7 @@ class BatteryAggregatorNode(Node):
                 data = yaml.safe_load(self._config_path.read_text())
                 if data and "active_batteries" in data:
                     batteries = data["active_batteries"]
-                    self.get_logger().info(
-                        f"Loaded active batteries from config: {batteries}"
-                    )
+                    self.get_logger().info(f"Loaded active batteries from config: {batteries}")
                     return list(batteries)
             except Exception as e:
                 self.get_logger().warn(f"Failed to read config file: {e}")
@@ -98,9 +91,7 @@ class BatteryAggregatorNode(Node):
             self._config_path.parent.mkdir(parents=True, exist_ok=True)
             data = {"active_batteries": self._active}
             self._config_path.write_text(yaml.dump(data, default_flow_style=False))
-            self.get_logger().info(
-                f"Saved active batteries to {self._config_path}: {self._active}"
-            )
+            self.get_logger().info(f"Saved active batteries to {self._config_path}: {self._active}")
         except Exception as e:
             self.get_logger().warn(f"Failed to save config: {e}")
 
@@ -186,9 +177,7 @@ class BatteryAggregatorNode(Node):
         if msg is not None:
             self._pub.publish(msg)
 
-    def _combine_states(
-        self, states: list[tuple[str, BatteryState]]
-    ) -> Optional[BatteryState]:
+    def _combine_states(self, states: list[tuple[str, BatteryState]]) -> Optional[BatteryState]:
         """Combine multiple battery states into one (parallel battery config)."""
         if not states:
             return None

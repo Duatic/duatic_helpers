@@ -42,9 +42,7 @@ class MockBatteryNode(Node):
         for i in range(count):
             name = f"{prefix}_{i + 1:02d}"
             pct = round(random.uniform(1.0, 100.0), 1)
-            pub = self.create_publisher(
-                BatteryState, f"/batteries/{name}/state", qos
-            )
+            pub = self.create_publisher(BatteryState, f"/batteries/{name}/state", qos)
             self._batteries.append((name, pct, pub))
 
         names = ", ".join(f"{n} ({p:.0f}%)" for n, p, _ in self._batteries)
@@ -87,9 +85,7 @@ class MockBatteryNode(Node):
         msg.power_supply_technology = BatteryState.POWER_SUPPLY_TECHNOLOGY_LIFE
 
         pub.publish(msg)
-        self.get_logger().debug(
-            f"Mock battery '{name}': {percentage:.1f}%, {voltage:.1f}V"
-        )
+        self.get_logger().debug(f"Mock battery '{name}': {percentage:.1f}%, {voltage:.1f}V")
 
 
 def main(args=None):

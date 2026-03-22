@@ -130,9 +130,7 @@ class LiTimeBatteryNode(Node):
 
         if self._single_mode:
             topic_name = _sanitize_topic_name(self._ble_address)
-            pub = self.create_publisher(
-                BatteryState, f"/batteries/{topic_name}/state", 10
-            )
+            pub = self.create_publisher(BatteryState, f"/batteries/{topic_name}/state", 10)
             self._devices[self._ble_address] = _BatteryDevice(
                 self._ble_address, self._ble_address, pub
             )
@@ -141,15 +139,11 @@ class LiTimeBatteryNode(Node):
 
         # Periodic rescan for new devices
         if not self._single_mode:
-            self._scan_timer = self.create_timer(
-                self._scan_interval, self._scan_wrapper
-            )
+            self._scan_timer = self.create_timer(self._scan_interval, self._scan_wrapper)
 
         # Dedicated asyncio event loop in a background thread for bleak
         self._loop = asyncio.new_event_loop()
-        self._ble_thread = threading.Thread(
-            target=self._loop.run_forever, daemon=True
-        )
+        self._ble_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._ble_thread.start()
 
         mode = f"single ({self._ble_address})" if self._single_mode else "discover-all"
@@ -182,13 +176,10 @@ class LiTimeBatteryNode(Node):
                 continue
 
             topic_name = _sanitize_topic_name(name)
-            pub = self.create_publisher(
-                BatteryState, f"/batteries/{topic_name}/state", 10
-            )
+            pub = self.create_publisher(BatteryState, f"/batteries/{topic_name}/state", 10)
             self._devices[dev.address] = _BatteryDevice(dev.address, name, pub)
             self.get_logger().info(
-                f"Discovered battery: {name} ({dev.address}) "
-                f"→ /batteries/{topic_name}/state"
+                f"Discovered battery: {name} ({dev.address}) " f"→ /batteries/{topic_name}/state"
             )
 
         if not self._devices:
@@ -217,9 +208,7 @@ class LiTimeBatteryNode(Node):
         try:
             async with BleakClient(device.address, timeout=10.0) as client:
                 if not device.connected:
-                    self.get_logger().info(
-                        f"Connected to {device.ble_name} ({device.address})"
-                    )
+                    self.get_logger().info(f"Connected to {device.ble_name} ({device.address})")
                     device.connected = True
 
                 await client.start_notify(NOTIFY_UUID, on_notify)
@@ -229,9 +218,7 @@ class LiTimeBatteryNode(Node):
 
         except Exception as e:
             if device.connected:
-                self.get_logger().warn(
-                    f"BLE connection lost to {device.ble_name}: {e}"
-                )
+                self.get_logger().warn(f"BLE connection lost to {device.ble_name}: {e}")
                 device.connected = False
             return
 
@@ -242,8 +229,7 @@ class LiTimeBatteryNode(Node):
         parsed = parse_response(bytes(response_data))
         if parsed is None:
             self.get_logger().warn(
-                f"Failed to parse response from {device.ble_name} "
-                f"({len(response_data)} bytes)"
+                f"Failed to parse response from {device.ble_name} " f"({len(response_data)} bytes)"
             )
             return
 
