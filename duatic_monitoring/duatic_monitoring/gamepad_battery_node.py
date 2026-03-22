@@ -11,15 +11,18 @@ class GamepadBatteryNode(Node):
     def __init__(self):
         super().__init__("gamepad_battery")
 
-        self.declare_parameter("poll_interval_sec", 10.0)
+        self.declare_parameter("poll_interval_sec", 30.0)
         self.declare_parameter("power_supply_path", "")
 
         interval = self.get_parameter("poll_interval_sec").value
         self._configured_path = self.get_parameter("power_supply_path").value
 
-        self._pub = self.create_publisher(BatteryState, "gamepad/battery", 10)
+        self._pub = self.create_publisher(BatteryState, "/batteries/gamepad/state", 10)
         self._timer = self.create_timer(interval, self._poll)
         self._last_path: str | None = None
+
+        # Poll once immediately at startup
+        self._poll()
 
         self.get_logger().info(f"Polling gamepad battery every {interval}s")
 
