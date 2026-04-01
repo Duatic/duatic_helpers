@@ -257,16 +257,17 @@ class PyrokiIKSolver:
         self.self_collision_margin = self_collision_margin
 
         # Pre-identify elbow/shoulder joints for singularity nudging
-        self._elbow_indices = [
-            i for i, n in enumerate(self.joint_names) if "elbow_flexion" in n
-        ]
+        self._elbow_indices = [i for i, n in enumerate(self.joint_names) if "elbow_flexion" in n]
         self._shoulder_indices = [
             i for i, n in enumerate(self.joint_names) if "shoulder_flexion" in n
         ]
 
     def _nudge_near_zero(
-        self, cfg: np.ndarray, thresh: float = 0.08,
-        elbow_nudge: float = -0.3, shoulder_nudge: float = 0.2,
+        self,
+        cfg: np.ndarray,
+        thresh: float = 0.08,
+        elbow_nudge: float = -0.3,
+        shoulder_nudge: float = 0.2,
     ) -> np.ndarray:
         """If cfg is near-zero (singular), nudge elbow/shoulder to help the optimizer.
 

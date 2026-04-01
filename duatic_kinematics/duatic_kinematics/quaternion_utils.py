@@ -31,6 +31,7 @@ import numpy as np
 # Format conversion
 # ---------------------------------------------------------------------------
 
+
 def xyzw_to_wxyz(q):
     """Convert quaternion from [x, y, z, w] to [w, x, y, z]."""
     q = np.asarray(q, dtype=np.float64).reshape(4)
@@ -47,6 +48,7 @@ def wxyz_to_xyzw(q):
 # Normalization
 # ---------------------------------------------------------------------------
 
+
 def normalize_quat(q):
     """Normalize a quaternion (any convention)."""
     q = np.asarray(q, dtype=np.float64).reshape(4)
@@ -60,18 +62,24 @@ def normalize_quat(q):
 # wxyz operations
 # ---------------------------------------------------------------------------
 
+
 def quat_multiply_wxyz(q1, q2):
     """Hamilton product of two wxyz quaternions."""
     q1 = normalize_quat(q1)
     q2 = normalize_quat(q2)
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
-    return normalize_quat(np.array([
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-    ], dtype=np.float64))
+    return normalize_quat(
+        np.array(
+            [
+                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            ],
+            dtype=np.float64,
+        )
+    )
 
 
 def quat_from_axis_angle_wxyz(axis, angle_rad):
@@ -124,18 +132,24 @@ def quat_angle_error_wxyz(q1, q2):
 # xyzw operations
 # ---------------------------------------------------------------------------
 
+
 def quat_multiply_xyzw(q1, q2):
     """Hamilton product of two xyzw quaternions."""
     q1 = normalize_quat(q1)
     q2 = normalize_quat(q2)
     x1, y1, z1, w1 = q1
     x2, y2, z2, w2 = q2
-    return normalize_quat(np.array([
-        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
-        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
-        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
-        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
-    ], dtype=np.float64))
+    return normalize_quat(
+        np.array(
+            [
+                w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+                w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+                w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+                w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            ],
+            dtype=np.float64,
+        )
+    )
 
 
 def quat_from_axis_angle_xyzw(axis, angle_rad):
@@ -154,6 +168,7 @@ def quat_from_axis_angle_xyzw(axis, angle_rad):
 # ---------------------------------------------------------------------------
 # Pose helpers (7D: [x, y, z, qx, qy, qz, qw] or [x, y, z, qw, qx, qy, qz])
 # ---------------------------------------------------------------------------
+
 
 def translate_pose(pose, dx=0.0, dy=0.0, dz=0.0):
     """Translate pose position in the base frame."""
