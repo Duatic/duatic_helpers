@@ -116,7 +116,9 @@ class PinocchioSolver:
 
         return translation, quaternion_wxyz
 
-    def solve_ik(self, joint_values, target_se3, frame, target_frame=None, iterations=100, threshold=0.01):
+    def solve_ik(
+        self, joint_values, target_se3, frame, target_frame=None, iterations=100, threshold=0.01
+    ):
         """Solve inverse kinematics using damped pseudo-inverse.
 
         Args:
