@@ -245,7 +245,23 @@ class PyrokiIKSolver:
     - Automatic singularity nudge for near-zero configurations
     """
 
-    def __init__(self, urdf_input, self_collision_weight=10.0, self_collision_margin=0.01):
+    def __init__(
+        self,
+        urdf_input,
+        self_collision_weight=10.0,
+        self_collision_margin=0.01,
+        singularity_nudge_joints=None,
+    ):
+        """
+        Args:
+            urdf_input: URDF file path, XML string, StringIO, or yourdfpy.URDF object
+            self_collision_weight: weight for self-collision avoidance cost
+            self_collision_margin: collision margin in meters
+            singularity_nudge_joints: optional dict mapping joint name patterns to nudge
+                values (rad). When the robot config is near-zero (singular), matching
+                joints are nudged to help the optimizer escape.
+                Example: {"elbow_flexion": -0.3, "shoulder_flexion": 0.2}
+        """
         if isinstance(urdf_input, yourdfpy.URDF):
             urdf_obj = urdf_input
         else:
@@ -256,34 +272,29 @@ class PyrokiIKSolver:
         self.self_collision_weight = self_collision_weight
         self.self_collision_margin = self_collision_margin
 
-        # Pre-identify elbow/shoulder joints for singularity nudging
-        self._elbow_indices = [i for i, n in enumerate(self.joint_names) if "elbow_flexion" in n]
-        self._shoulder_indices = [
-            i for i, n in enumerate(self.joint_names) if "shoulder_flexion" in n
-        ]
+        # Pre-identify joints for singularity nudging (pattern -> (indices, nudge_value))
+        self._nudge_config = {}
+        if singularity_nudge_joints:
+            for pattern, nudge_val in singularity_nudge_joints.items():
+                indices = [i for i, n in enumerate(self.joint_names) if pattern in n]
+                if indices:
+                    self._nudge_config[pattern] = (indices, nudge_val)
 
-    def _nudge_near_zero(
-        self,
-        cfg: np.ndarray,
-        thresh: float = 0.08,
-        elbow_nudge: float = -0.3,
-        shoulder_nudge: float = 0.2,
-    ) -> np.ndarray:
-        """If cfg is near-zero (singular), nudge elbow/shoulder to help the optimizer.
+    def _nudge_near_zero(self, cfg: np.ndarray, thresh: float = 0.08) -> np.ndarray:
+        """If cfg is near-zero (singular), nudge configured joints to help the optimizer.
 
         Returns a modified copy suitable as initial_cfg. The original prev_cfg
         should still be used as the rest-pose so the solver doesn't over-commit.
         """
+        if not self._nudge_config:
+            return cfg  # no nudge joints configured
         if np.sum(np.abs(cfg) > thresh) > 2:
             return cfg  # not near-zero, no nudge needed
-        if not self._elbow_indices:
-            return cfg  # no elbow joints to nudge
 
         nudged = cfg.copy()
-        for i in self._elbow_indices:
-            nudged[i] = elbow_nudge
-        for i in self._shoulder_indices:
-            nudged[i] = shoulder_nudge
+        for indices, nudge_val in self._nudge_config.values():
+            for i in indices:
+                nudged[i] = nudge_val
         return nudged
 
     def forward_kinematics(self, joint_cfg, link_names):

@@ -4,8 +4,10 @@
   <name>duatic_kinematics</name>
   <version>0.1.0</version>
   <description>Optimized kinematics solvers for Duatic robots.</description>
-  <maintainer email="tschwarzer@dautic.com">Timo Schwarzer</maintainer>
+  <maintainer email="tschwarzer@duatic.com">Timo Schwarzer</maintainer>
   <license>BSD-3-Clause</license>
+
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
