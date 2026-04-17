@@ -109,13 +109,13 @@ def _solve_ik(
             robot,
             joint_var,
         ),
-        pk.costs.self_collision_cost(
-            robot,
-            robot_coll,
-            joint_var,
-            margin=self_collision_margin,
-            weight=self_collision_weight,
-        ),
+        # pk.costs.self_collision_cost(
+        #     robot,
+        #     robot_coll,
+        #     joint_var,
+        #     margin=self_collision_margin,
+        #     weight=self_collision_weight,
+        # ),
         _limit_margin_cost(
             robot,
             joint_var,
@@ -280,7 +280,7 @@ class PyrokiIKSolver:
                 if indices:
                     self._nudge_config[pattern] = (indices, nudge_val)
 
-    def _nudge_near_zero(self, cfg: np.ndarray, thresh: float = 0.08) -> np.ndarray:
+    def _nudge_near_zero(self, cfg: jnp.ndarray, thresh: float = 0.08) -> jnp.ndarray:
         """If cfg is near-zero (singular), nudge configured joints to help the optimizer.
 
         Returns a modified copy suitable as initial_cfg. The original prev_cfg
@@ -288,7 +288,7 @@ class PyrokiIKSolver:
         """
         if not self._nudge_config:
             return cfg  # no nudge joints configured
-        if np.sum(np.abs(cfg) > thresh) > 2:
+        if jnp.sum(jnp.abs(cfg) > thresh) > 2:
             return cfg  # not near-zero, no nudge needed
 
         nudged = cfg.copy()
@@ -313,8 +313,8 @@ class PyrokiIKSolver:
         for name in link_names:
             idx = self.robot.links.names.index(name)
             pose = jaxlie.SE3(Ts[idx])
-            positions.append(np.array(pose.translation()))
-            wxyzs.append(np.array(pose.rotation().wxyz))
+            positions.append(jnp.array(pose.translation()))
+            wxyzs.append(jnp.array(pose.rotation().wxyz))
         return np.array(positions, dtype=np.float32), np.array(wxyzs, dtype=np.float32)
 
     def solve(self, target_link_name, target_pos, target_wxyz, prev_cfg, joint_mask=None):
@@ -333,11 +333,11 @@ class PyrokiIKSolver:
         """
         n = len(self.joint_names)
         if joint_mask is None:
-            joint_mask = np.ones(n, dtype=np.float32)
+            joint_mask = jnp.ones(n, dtype=jnp.float32)
 
         target_link_index = self.robot.links.names.index(target_link_name)
 
-        prev_cfg_np = np.asarray(prev_cfg, dtype=np.float32)
+        prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
         initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
 
         cfg = _solve_ik(
@@ -354,9 +354,9 @@ class PyrokiIKSolver:
         )
 
         # Safety net: enforce locked joints stay exactly at prev_cfg
-        cfg_np = np.array(cfg)
-        mask_arr = np.array(joint_mask)
-        cfg_np = np.where(mask_arr > 0.5, cfg_np, prev_cfg)
+        cfg_np = jnp.array(cfg)
+        mask_arr = jnp.array(joint_mask)
+        cfg_np = jnp.where(mask_arr > 0.5, cfg_np, prev_cfg)
 
         pos_err, ori_err = _compute_pose_error(
             self.robot,
@@ -366,7 +366,7 @@ class PyrokiIKSolver:
             jnp.array(target_pos, dtype=jnp.float32),
         )
 
-        return cfg_np, float(pos_err), float(ori_err)
+        return np.array(cfg_np), float(pos_err), float(ori_err)
 
     def solve_multi(
         self, target_link_names, target_positions, target_wxyzs, prev_cfg, joint_mask=None
@@ -389,11 +389,11 @@ class PyrokiIKSolver:
         """
         n = len(self.joint_names)
         if joint_mask is None:
-            joint_mask = np.ones(n, dtype=np.float32)
+            joint_mask = jnp.ones(n, dtype=jnp.float32)
 
         target_link_indices = [self.robot.links.names.index(name) for name in target_link_names]
 
-        prev_cfg_np = np.asarray(prev_cfg, dtype=np.float32)
+        prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
         initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
 
         cfg = _solve_ik_multi(
@@ -408,11 +408,11 @@ class PyrokiIKSolver:
             self_collision_weight=self.self_collision_weight,
             self_collision_margin=self.self_collision_margin,
         )
-        cfg_np = np.array(cfg)
+        cfg_np = jnp.array(cfg)
 
         # Safety net: enforce locked joints stay exactly at prev_cfg
-        mask_arr = np.array(joint_mask)
-        cfg_np = np.where(mask_arr > 0.5, cfg_np, prev_cfg)
+        mask_arr = jnp.array(joint_mask)
+        cfg_np = jnp.where(mask_arr > 0.5, cfg_np, prev_cfg)
 
         errors = []
         for i, idx in enumerate(target_link_indices):
@@ -425,4 +425,4 @@ class PyrokiIKSolver:
             )
             errors.append((float(pos_err), float(ori_err)))
 
-        return cfg_np, errors
+        return np.array(cfg_np), errors
