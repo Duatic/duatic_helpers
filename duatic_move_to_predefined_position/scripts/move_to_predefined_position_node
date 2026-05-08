@@ -1,4 +1,0 @@
-#!/usr/bin/env python3
-from duatic_move_to_predefined_position.move_to_predefined_position_node import main
-
-main()
