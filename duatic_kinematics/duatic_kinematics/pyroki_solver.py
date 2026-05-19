@@ -31,15 +31,30 @@ import jax_dataclasses as jdc
 import jaxlie
 import jaxls
 
+from ament_index_python.packages import get_package_share_directory
+import os
+
+def ros_package_filename_handler(fname):
+    if fname.startswith("package://"):
+        path = fname[len("package://"):]
+
+        pkg_name, relative_path = path.split("/", 1)
+
+        pkg_share = get_package_share_directory(pkg_name)
+
+        return os.path.join(pkg_share, relative_path)
+
+    return fname
+
 
 def _load_urdf(urdf_input):
     """Load URDF from file path, StringIO, or XML string."""
     if isinstance(urdf_input, str) and not urdf_input.startswith("<"):
-        return yourdfpy.URDF.load(urdf_input)
+        return yourdfpy.URDF.load(urdf_input, filename_handler=ros_package_filename_handler)
     elif isinstance(urdf_input, io.StringIO):
-        return yourdfpy.URDF.load(urdf_input)
+        return yourdfpy.URDF.load(urdf_input, filename_handler=ros_package_filename_handler)
     else:
-        return yourdfpy.URDF.load(io.StringIO(urdf_input))
+        return yourdfpy.URDF.load(io.StringIO(urdf_input), filename_handler=ros_package_filename_handler)
 
 
 def _limit_margin_residual(
@@ -131,6 +146,7 @@ def _solve_ik(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
+            termination=jaxls.TerminationConfig(max_iterations=10),
             initial_vals=jaxls.VarValues.make([joint_var.with_value(initial_cfg)]),
         )
     )
