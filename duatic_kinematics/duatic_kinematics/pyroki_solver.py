@@ -146,7 +146,7 @@ def _solve_ik(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
-            termination=jaxls.TerminationConfig(max_iterations=10),
+            termination=jaxls.TerminationConfig(max_iterations=30),
             initial_vals=jaxls.VarValues.make([joint_var.with_value(initial_cfg)]),
         )
     )
