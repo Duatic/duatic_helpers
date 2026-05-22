@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>duatic_move_to_predefined_position</name>
+  <version>1.4.0</version>
+  <description>Moves arms automatically to predefined positions</description>
+  <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
+  <license>BSD 3-Clause</license>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>osrf_pycommon</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-types-pyyaml</exec_depend>
+  <exec_depend>duatic_helpers</exec_depend>
+  <exec_depend>controller_manager_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_mypy</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
