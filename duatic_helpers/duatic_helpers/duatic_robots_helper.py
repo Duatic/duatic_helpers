@@ -95,7 +95,7 @@ class DuaticRobotsHelper:
 
     def _joint_sate_callback(self, msg):
         """Callback to update joint states and detect robots."""
-        self._joint_states = dict(zip(msg.name, msg.position))
+        self._joint_states.update(dict(zip(msg.name, msg.position)))
 
         if self._robot_count <= 0:
             self._robot = self.get_robots_with_components()
