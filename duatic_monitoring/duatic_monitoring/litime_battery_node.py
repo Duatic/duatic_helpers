@@ -93,7 +93,7 @@ def parse_response(data: bytes) -> Optional[dict]:
 
 def _sanitize_topic_name(ble_name: str) -> str:
     """Convert a BLE device name to a valid ROS topic segment."""
-    return ble_name.replace(" ", "_").replace(":", "_").lower()
+    return ble_name.replace(" ", "_").replace(":", "_").replace("-", "_").lower()
 
 
 class _BatteryDevice:
