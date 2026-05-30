@@ -43,6 +43,7 @@ class DuaticControllerHelper:
             "cartesian_pose_controller",
             "mecanum_drive_controller",
             "freeze_controller",
+            "pin_release_controller",
         ]
 
         self.active_low_level_controllers = []
