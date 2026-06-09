@@ -1,0 +1,7 @@
+---
+# List of latest received joint states
+sensor_msgs/JointState state
+# List of the timestamps the joint state had when in its header when received + the timestamps when the joint state was received
+# Both lists have the same order as the joints in the state field
+builtin_interfaces/Time[] produce_time_stamps
+builtin_interfaces/Time[] receive_time_stamps
