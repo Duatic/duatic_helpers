@@ -11,5 +11,8 @@ jax_dataclasses
 # URDF parsing
 yourdfpy
 
+# Pinocchio: rigid body dynamics (install via apt: ros-${ROS_DISTRO}-pinocchio)
+# pinocchio
+
 # PyRoki: Robot Kinematics Library (directly from GitHub)
 git+https://github.com/dfki-ric/pyroki.git@main

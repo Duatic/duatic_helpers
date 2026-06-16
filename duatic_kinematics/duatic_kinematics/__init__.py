@@ -1,4 +1,5 @@
 from .pyroki_solver import PyrokiIKSolver
+from .pinocchio_solver import PinocchioSolver
 from .waypoint_generators import linear_waypoints, arc_waypoints
 from .smoothing import smooth_and_limit
 from .quaternion_utils import (
@@ -17,6 +18,7 @@ from .quaternion_utils import (
 
 __all__ = [
     "PyrokiIKSolver",
+    "PinocchioSolver",
     "linear_waypoints",
     "arc_waypoints",
     "smooth_and_limit",
