@@ -75,11 +75,25 @@ class DuaticParamHelper:
             if urdf_values and urdf_values[0].string_value:
                 self.node.get_logger().info(f"Successfully loaded URDF from {node_name}")
                 return urdf_values[0].string_value
-            else:
-                self.node.get_logger().warning(
-                    f"URDF parameter '{param_name}' at '{node_name}' is empty"
-                )
-                return None
+
+            # Fall back: search the ROS graph for the node in any namespace
+            for name, ns in self.node.get_node_names_and_namespaces():
+                if name == node_name:
+                    full = ns.rstrip("/") + "/" + name if ns != "/" else "/" + name
+                    if full == node_name:
+                        continue
+                    self.node.get_logger().info(
+                        f"Retrying URDF fetch from discovered node '{full}'"
+                    )
+                    urdf_values = self.get_param_values(full, param_name)
+                    if urdf_values and urdf_values[0].string_value:
+                        self.node.get_logger().info(f"Successfully loaded URDF from {full}")
+                        return urdf_values[0].string_value
+
+            self.node.get_logger().warning(
+                f"URDF parameter '{param_name}' at '{node_name}' is empty"
+            )
+            return None
         except Exception as e:
             self.node.get_logger().warn(f"Failed to get URDF from {node_name}: {e}")
             return None

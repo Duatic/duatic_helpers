@@ -75,10 +75,12 @@ class DuaticRobotsHelper:
             urdf = urdf_raw.lower()
             # Priority based identification to avoid mis-detecting rovers with arm metadata
             # Morphology-based identification
-            if "wheel" in urdf and "hip" in urdf:
+            has_wheels = "wheel" in urdf
+            has_arm = "hip" in urdf or "shoulder" in urdf or "elbow" in urdf
+            if has_wheels and has_arm:
                 self.robot_structure = "mobile_manipulator"
                 self.node.get_logger().info(
-                    "Identified robot structure: Mobile Manipulator (Base + Torso)"
+                    "Identified robot structure: Mobile Manipulator (Base + Arm)"
                 )
             elif "hip" in urdf:
                 self.robot_structure = "multi_arm"
