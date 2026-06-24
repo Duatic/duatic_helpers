@@ -34,9 +34,10 @@ import jaxls
 from ament_index_python.packages import get_package_share_directory
 import os
 
+
 def ros_package_filename_handler(fname):
     if fname.startswith("package://"):
-        path = fname[len("package://"):]
+        path = fname[len("package://") :]
 
         pkg_name, relative_path = path.split("/", 1)
 
@@ -54,7 +55,9 @@ def _load_urdf(urdf_input):
     elif isinstance(urdf_input, io.StringIO):
         return yourdfpy.URDF.load(urdf_input, filename_handler=ros_package_filename_handler)
     else:
-        return yourdfpy.URDF.load(io.StringIO(urdf_input), filename_handler=ros_package_filename_handler)
+        return yourdfpy.URDF.load(
+            io.StringIO(urdf_input), filename_handler=ros_package_filename_handler
+        )
 
 
 def _limit_margin_residual(
