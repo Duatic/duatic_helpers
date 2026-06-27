@@ -1,5 +1,6 @@
 # duatic_helpers
 [![Jazzy Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml)
+[![Lyrical Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
 [![Kilted Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml)
 [![Rolling Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml)
 
