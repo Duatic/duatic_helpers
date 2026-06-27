@@ -43,11 +43,23 @@ target_compile_features(joint_state_provider PRIVATE c_std_99 cxx_std_20)  # Req
 target_include_directories(joint_state_provider PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-ament_target_dependencies(joint_state_provider
-  rclcpp
-  duatic_helper_msgs
-  sensor_msgs
-)
+
+# Support ros distros older than lyrical
+if(COMMAND ament_target_dependencies)
+    ament_target_dependencies(joint_state_provider
+      rclcpp
+      duatic_helper_msgs
+      sensor_msgs
+    )
+else()
+    target_link_libraries(joint_state_provider
+      rclcpp::rclcpp
+      duatic_helper_msgs::duatic_helper_msgs
+      sensor_msgs::sensor_msgs
+    )
+endif()
+
+
 install(TARGETS joint_state_provider
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
