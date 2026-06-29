@@ -15,7 +15,6 @@ setup(
     maintainer="Duatic AG",
     description="Optimized kinematics solvers for Duatic robots.",
     license="BSD-3-Clause",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [],
     },

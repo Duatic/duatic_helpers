@@ -1,4 +1,3 @@
-from .pyroki_solver import PyrokiIKSolver
 from .waypoint_generators import linear_waypoints, arc_waypoints
 from .smoothing import smooth_and_limit
 from .quaternion_utils import (
@@ -32,3 +31,13 @@ __all__ = [
     "translate_pose",
     "rotate_pose_local_axis_xyzw",
 ]
+
+
+def __getattr__(name):
+    # Import the heavy pyroki/jax stack lazily so that simply importing this
+    # package does not require those optional third-party dependencies to be installed.
+    if name == "PyrokiIKSolver":
+        from .pyroki_solver import PyrokiIKSolver
+
+        return PyrokiIKSolver
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
