@@ -38,7 +38,7 @@ setup(
     zip_safe=True,
     maintainer="Marc Blöchlinger",
     maintainer_email="mbloechlinger@duatic.com",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     description="Common support functionality used throughout duatic stack",
     license="BSD-3-Clause",
     entry_points={
