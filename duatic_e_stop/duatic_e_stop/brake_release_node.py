@@ -195,7 +195,9 @@ class BrakeReleaseNode(Node):
         request.deactivate_controllers = [name]
         request.strictness = SwitchController.Request.BEST_EFFORT
 
-        self.get_logger().info("Brake release combo released - deactivating brake release controller.")
+        self.get_logger().info(
+            "Brake release combo released - deactivating brake release controller."
+        )
         future = self.switch_controller_client.call_async(request)
         future.add_done_callback(lambda f: self._log_switch_response(f, "deactivation"))
 
