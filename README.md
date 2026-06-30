@@ -1,7 +1,7 @@
 # duatic_helpers
 [![Jazzy](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml)
-[![Lyrical](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
 [![Kilted](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml)
+[![Lyrical](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
 [![Rolling](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml)
 
 This repository contains ROS 2 related helper scripts and robotics libraries used at [Duatic](https://duatic.com).
