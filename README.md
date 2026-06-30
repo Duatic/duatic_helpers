@@ -1,8 +1,8 @@
 # duatic_helpers
-[![Jazzy Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml)
-[![Lyrical Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
-[![Kilted Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml)
-[![Rolling Build Main](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml)
+[![Jazzy](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml)
+[![Kilted](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml)
+[![Lyrical](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
+[![Rolling](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml)
 
 This repository contains ROS 2 related helper scripts and robotics libraries used at [Duatic](https://duatic.com).
 
