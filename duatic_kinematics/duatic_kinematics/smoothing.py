@@ -21,30 +21,38 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import os
-from setuptools import find_packages, setup
+import numpy as np
 
-package_name = "duatic_e_stop"
 
-setup(
-    name=package_name,
-    version="1.4.0",
-    packages=find_packages(exclude=["test"]),
-    data_files=[
-        ("share/ament_index/resource_index/packages", [os.path.join("resource", package_name)]),
-        ("share/" + package_name, ["package.xml"]),
-    ],
-    install_requires=["setuptools"],
-    zip_safe=True,
-    maintainer="Marc Blöchlinger",
-    maintainer_email="mbloechlinger@duatic.com",
-    extras_require={"test": ["pytest"]},
-    description="Common support functionality used throughout duatic stack",
-    license="BSD-3-Clause",
-    entry_points={
-        "console_scripts": [
-            "e_stop_node = duatic_e_stop.e_stop_node:main",
-            "brake_release_node = duatic_e_stop.brake_release_node:main",
-        ],
-    },
-)
+def smooth_and_limit(target_q, smoothed_q, last_q, alpha, max_velocity, dt):
+    """Alpha-filter smoothing with velocity clamping.
+
+    Applies exponential smoothing (alpha filter) to the target joint configuration,
+    then clamps the per-joint velocity to max_velocity.
+
+    Args:
+        target_q: (n,) desired joint configuration
+        smoothed_q: (n,) previous smoothed value, or None on first call
+        last_q: (n,) last published smoothed value (for velocity limiting), or None
+        alpha: smoothing factor in [0, 1]. Higher = more responsive, lower = smoother
+        max_velocity: maximum joint velocity in rad/s
+        dt: time step in seconds
+
+    Returns:
+        (n,) smoothed and velocity-limited joint configuration
+    """
+    target_q = np.asarray(target_q, dtype=np.float64)
+
+    if smoothed_q is None:
+        result = target_q.copy()
+    else:
+        smoothed_q = np.asarray(smoothed_q, dtype=np.float64)
+        result = alpha * target_q + (1.0 - alpha) * smoothed_q
+
+    if last_q is not None:
+        last_q = np.asarray(last_q, dtype=np.float64)
+        max_delta = max_velocity * dt
+        delta = result - last_q
+        result = last_q + np.clip(delta, -max_delta, max_delta)
+
+    return result
