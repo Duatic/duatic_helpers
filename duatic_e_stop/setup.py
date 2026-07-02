@@ -44,6 +44,7 @@ setup(
     entry_points={
         "console_scripts": [
             "e_stop_node = duatic_e_stop.e_stop_node:main",
+            "brake_release_node = duatic_e_stop.brake_release_node:main",
         ],
     },
 )
