@@ -11,7 +11,7 @@ on:
 
 jobs:
   jazzy:
-    uses: Duatic/ci-workflows/.github/workflows/ros_ici.yml@1cf0d48d0525938b882071dc5679b69f29c06679
+    uses: Duatic/ci-workflows/.github/workflows/ros_ici.yml@v1
     with:
       ros_distro: jazzy
       ros_repo: main
@@ -27,7 +27,7 @@ jobs:
           - { ros_distro: kilted, ros_repo: main }
           - { ros_distro: lyrical, ros_repo: main }
           - { ros_distro: rolling, ros_repo: testing }
-    uses: Duatic/ci-workflows/.github/workflows/ros_ici.yml@1cf0d48d0525938b882071dc5679b69f29c06679
+    uses: Duatic/ci-workflows/.github/workflows/ros_ici.yml@v1
     with:
       ros_distro: ${{ matrix.ros_distro }}
       ros_repo: ${{ matrix.ros_repo }}
@@ -35,4 +35,4 @@ jobs:
     secrets: inherit
 
   pre-commit:
-    uses: Duatic/ci-workflows/.github/workflows/pre-commit.yml@1cf0d48d0525938b882071dc5679b69f29c06679
+    uses: Duatic/ci-workflows/.github/workflows/pre-commit.yml@v1
