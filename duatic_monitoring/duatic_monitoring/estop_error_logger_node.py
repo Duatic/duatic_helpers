@@ -26,14 +26,14 @@
 @brief Monitors for emergency stop events and dumps diagnostic data to a rosbag.
 
 Auto-discovers all visible topics and maintains a rolling buffer of their raw
-serialized messages. Monitors duatic_dynaarm_msgs/ArmState specifically to detect
+serialized messages. Monitors duatic_controller_msgs/DriveStateCollection specifically to detect
 frozen data states (indicating the e-stop was pressed and motors lost power).
 On detection, dumps the buffered history of ALL topics to a timestamped MCAP rosbag.
 """
 
 import os
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -48,21 +48,21 @@ from rcl_interfaces.msg import Log
 import rosbag2_py
 
 from rosidl_runtime_py.utilities import get_message
-from duatic_dynaarm_msgs.msg import ArmState
+from duatic_controller_msgs.msg import DriveStateCollection
 
-STATE_MSG_TYPE = "duatic_dynaarm_msgs/msg/ArmState"
+STATE_MSG_TYPE = "duatic_controller_msgs/msg/DriveStateCollection"
 LOG_SEVERITY = {1: "DEBUG", 2: "INFO", 4: "WARN", 8: "ERROR", 16: "FATAL"}
 
 
 @dataclass
-class ArmStateMonitor:
+class DriveStateCollectionMonitor:
     """
-    @brief Data class representing the monitoring state of an ArmState topic.
+    @brief Data class representing the monitoring state of an DriveStateCollection topic.
     """
 
     topic_name: str
     last_changed_ns: Optional[int] = None
-    last_message: Optional[ArmState] = None
+    last_message: Optional[DriveStateCollection] = None
     was_active: bool = False
     has_seen_dynamic_data: bool = False
     frozen: bool = False
@@ -73,7 +73,7 @@ class EStopErrorLoggerNode(Node):
     @brief ROS 2 Node that logs system state upon detecting a hardware emergency stop.
 
     This node dynamically discovers topics, buffers their serialized data, and
-    evaluates incoming ArmState messages to detect if sensor data has frozen
+    evaluates incoming DriveStateCollection messages to detect if sensor data has frozen
     (indicative of a motor power loss via E-Stop). Upon detection, it writes
     the buffered messages into an MCAP rosbag2 format.
     """
@@ -99,7 +99,7 @@ class EStopErrorLoggerNode(Node):
         self._generic_buffers: dict[str, deque] = {}
         self._topic_types: dict[str, str] = {}
         self._generic_subscriptions: dict[str, object] = {}
-        self._arm_state_monitors: dict[str, ArmStateMonitor] = {}
+        self._arm_state_monitors: dict[str, DriveStateCollectionMonitor] = {}
 
         self._rosout_buffer: deque = deque(maxlen=5000)
         self._rosout_sub = self.create_subscription(Log, "/rosout", self._rosout_callback, 100)
@@ -175,19 +175,21 @@ class EStopErrorLoggerNode(Node):
             q.popleft()
 
         if topic_type == STATE_MSG_TYPE:
-            msg = deserialize_message(msg_bytes, ArmState)
+            msg = deserialize_message(msg_bytes, DriveStateCollection)
             self._update_arm_state_monitor(topic_name, msg, now_ns)
 
-    def _update_arm_state_monitor(self, topic_name: str, msg: ArmState, now_ns: int) -> None:
+    def _update_arm_state_monitor(
+        self, topic_name: str, msg: DriveStateCollection, now_ns: int
+    ) -> None:
         """
-        @brief Evaluates deserialized ArmState messages to update the hardware freeze monitor.
+        @brief Evaluates deserialized DriveStateCollection messages to update the hardware freeze monitor.
 
-        @param topic_name The name of the ArmState topic.
-        @param msg The deserialized ArmState message.
+        @param topic_name The name of the DriveStateCollection topic.
+        @param msg The deserialized DriveStateCollection message.
         @param now_ns The current node time in nanoseconds.
         """
         monitor = self._arm_state_monitors.setdefault(
-            topic_name, ArmStateMonitor(topic_name=topic_name)
+            topic_name, DriveStateCollectionMonitor(topic_name=topic_name)
         )
         monitor.was_active = True
 
@@ -204,12 +206,14 @@ class EStopErrorLoggerNode(Node):
 
         monitor.last_message = msg
 
-    def _has_state_changed(self, old_msg: ArmState, new_msg: ArmState) -> bool:
+    def _has_state_changed(
+        self, old_msg: DriveStateCollection, new_msg: DriveStateCollection
+    ) -> bool:
         """
-        @brief Compares specific kinematic fields between two ArmState messages to detect a data freeze.
+        @brief Compares specific kinematic fields between two DriveStateCollection messages to detect a data freeze.
 
-        @param old_msg The previously received ArmState message.
-        @param new_msg The newly received ArmState message.
+        @param old_msg The previously received DriveStateCollection message.
+        @param new_msg The newly received DriveStateCollection message.
         @return True if the kinematic states have changed, False otherwise.
         """
         if len(old_msg.states) != len(new_msg.states):
@@ -291,7 +295,7 @@ class EStopErrorLoggerNode(Node):
         @param now_ns Trigger timestamp in nanoseconds.
         """
         lines = [
-            f"E-STOP EVENT DETECTED (DATA FROZEN)",
+            "E-STOP EVENT DETECTED (DATA FROZEN)",
             f"Timestamp: {datetime.now().isoformat()}",
             f"ROS time (ns): {now_ns}",
             "",
