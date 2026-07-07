@@ -69,8 +69,11 @@ class EmergencyStopNode(Node):
         self.declare_parameter("extern_e_stop", True)
         self._extern_e_stop_enabled: bool = self.get_parameter("extern_e_stop").value
 
-        # Serial port parameters (only used when extern_e_stop is True)
-        self.declare_parameter("serial_port", "/dev/ttyUSB0")
+        # Serial port parameters (only used when extern_e_stop is True).
+        # /dev/duatic_estop is a stable udev symlink (see clearpath_ridgeback/udev/)
+        # pinned to the Prolific PL2303 adapter's vendor/product ID, so it doesn't
+        # depend on USB enumeration order like /dev/ttyUSB0 does.
+        self.declare_parameter("serial_port", "/dev/duatic_estop")
         self.declare_parameter("serial_baud", 9600)
 
         # ── Gamepad / internal e-stop state ───────────────────────────────────
