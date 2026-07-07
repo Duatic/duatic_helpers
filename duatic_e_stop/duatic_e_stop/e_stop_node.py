@@ -34,6 +34,7 @@ from std_msgs.msg import Bool
 
 try:
     import serial
+
     _SERIAL_AVAILABLE = True
 except ImportError:
     _SERIAL_AVAILABLE = False
@@ -157,9 +158,7 @@ class EmergencyStopNode(Node):
                 self._serial_port = self.get_parameter("serial_port").value
                 self._serial_baud = self.get_parameter("serial_baud").value
                 self._running = True
-                self._reader_thread = threading.Thread(
-                    target=self._read_serial, daemon=True
-                )
+                self._reader_thread = threading.Thread(target=self._read_serial, daemon=True)
                 self._reader_thread.start()
         else:
             self.get_logger().info("External e-stop monitoring DISABLED.")
@@ -273,9 +272,9 @@ class EmergencyStopNode(Node):
                             # be detected as CLEAR when the platform was idle.
                             if self._serial_guess_pressed is None:
                                 self._serial_guess_pressed = (
-                                    self._extern_estop_active        # seed = current state
+                                    self._extern_estop_active  # seed = current state
                                     if self._extern_emergency_stop is not None
-                                    else False                       # unknown → seed CLEAR → first toggle = PRESSED (fail-safe)
+                                    else False  # unknown → seed CLEAR → first toggle = PRESSED (fail-safe)
                                 )
                             self._serial_guess_pressed = not self._serial_guess_pressed
                             guess = self._serial_guess_pressed
@@ -391,7 +390,10 @@ class EmergencyStopNode(Node):
 
     def update_freeze_controllers_status(self):
         if not self.list_controllers_client.service_is_ready():
-            self.get_logger().warn("Controller Manager service not available for status update.", throttle_duration_sec=10)
+            self.get_logger().warn(
+                "Controller Manager service not available for status update.",
+                throttle_duration_sec=10,
+            )
             return
 
         request = ListControllers.Request()
@@ -428,7 +430,9 @@ class EmergencyStopNode(Node):
             return
 
         if not self.switch_controller_client.service_is_ready():
-            self.get_logger().error("Controller Manager service not available.", throttle_duration_sec=10)
+            self.get_logger().error(
+                "Controller Manager service not available.", throttle_duration_sec=10
+            )
             return  # Do not set _freeze_target — allows retry on next call.
 
         controller_names = list(self.freeze_controller_states.keys())
