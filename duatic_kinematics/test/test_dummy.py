@@ -21,29 +21,6 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import os
-from setuptools import find_packages, setup
 
-package_name = "duatic_e_stop"
-
-setup(
-    name=package_name,
-    version="1.4.0",
-    packages=find_packages(exclude=["test"]),
-    data_files=[
-        ("share/ament_index/resource_index/packages", [os.path.join("resource", package_name)]),
-        ("share/" + package_name, ["package.xml"]),
-    ],
-    install_requires=["setuptools"],
-    zip_safe=True,
-    maintainer="Marc Blöchlinger",
-    maintainer_email="mbloechlinger@duatic.com",
-    extras_require={"test": ["pytest"]},
-    description="Common support functionality used throughout duatic stack",
-    license="BSD-3-Clause",
-    entry_points={
-        "console_scripts": [
-            "e_stop_node = duatic_e_stop.e_stop_node:main",
-        ],
-    },
-)
+def test_dummy():
+    assert True

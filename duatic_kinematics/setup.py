@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = "duatic_monitoring"
+package_name = "duatic_kinematics"
 
 setup(
     name=package_name,
@@ -11,13 +11,12 @@ setup(
         ("share/" + package_name, ["package.xml"]),
     ],
     install_requires=["setuptools"],
+    zip_safe=True,
+    maintainer="Duatic AG",
+    description="Optimized kinematics solvers for Duatic robots.",
+    license="BSD-3-Clause",
     extras_require={"test": ["pytest"]},
     entry_points={
-        "console_scripts": [
-            "gamepad_battery_node = duatic_monitoring.gamepad_battery_node:main",
-            "litime_battery_node = duatic_monitoring.litime_battery_node:main",
-            "mock_battery_node = duatic_monitoring.mock_battery_node:main",
-            "battery_aggregator_node = duatic_monitoring.battery_aggregator_node:main",
-        ],
+        "console_scripts": [],
     },
 )
