@@ -53,8 +53,6 @@ except ImportError:
 #
 # Rationale: platform topics are too slow for reliable press detection at runtime,
 # but they are the authoritative source for confirming that the e-stop has been released.
-_EXTERN_EMERGENCY_STOP_TOPIC = "/r100_0208/platform/emergency_stop"
-_EXTERN_MCU_STOP_STATUS_TOPIC = "/r100_0208/platform/mcu/status/stop"
 
 
 class EmergencyStopNode(Node):
@@ -67,7 +65,7 @@ class EmergencyStopNode(Node):
 
         # Set True to also monitor external platform e-stop (topics + serial cross-check).
         # If any source is active, freeze stays engaged regardless of gamepad state.
-        self.declare_parameter("extern_e_stop", True)
+        self.declare_parameter("extern_e_stop", False)
         self._extern_e_stop_enabled: bool = self.get_parameter("extern_e_stop").value
 
         # Serial port parameters (only used when extern_e_stop is True).
@@ -76,6 +74,9 @@ class EmergencyStopNode(Node):
         # depend on USB enumeration order like /dev/ttyUSB0 does.
         self.declare_parameter("serial_port", "/dev/duatic_estop")
         self.declare_parameter("serial_baud", 9600)
+
+        self.declare_parameter("extern_emergency_stop_topic", "/r100_0208/platform/emergency_stop")
+        self.declare_parameter("extern_mcu_stop_status_topic", "/r100_0208/platform/mcu/status/stop")
 
         # ── Gamepad / internal e-stop state ───────────────────────────────────
         self.gamepad_connected = False
@@ -135,18 +136,18 @@ class EmergencyStopNode(Node):
                 durability=DurabilityPolicy.VOLATILE,
             )
             self.create_subscription(
-                Bool, _EXTERN_EMERGENCY_STOP_TOPIC, self._extern_estop_cb, sub_qos
+                Bool, self.get_parameter("extern_emergency_stop_topic").value, self._extern_estop_cb, sub_qos
             )
             if StopStatus is not None:
                 self.create_subscription(
                     StopStatus,
-                    _EXTERN_MCU_STOP_STATUS_TOPIC,
+                    self.get_parameter("extern_mcu_stop_status_topic").value,
                     self._extern_mcu_status_cb,
                     sub_qos,
                 )
             else:
                 self.get_logger().error(
-                    f"Could not import StopStatus for {_EXTERN_MCU_STOP_STATUS_TOPIC}. "
+                    f"Could not import StopStatus for {self.get_parameter('extern_mcu_stop_status_topic').value}. "
                     "needs_reset will not be tracked — update the import in e_stop_node.py."
                 )
 
