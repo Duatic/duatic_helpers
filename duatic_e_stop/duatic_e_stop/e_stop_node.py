@@ -76,7 +76,9 @@ class EmergencyStopNode(Node):
         self.declare_parameter("serial_baud", 9600)
 
         self.declare_parameter("extern_emergency_stop_topic", "/r100_0208/platform/emergency_stop")
-        self.declare_parameter("extern_mcu_stop_status_topic", "/r100_0208/platform/mcu/status/stop")
+        self.declare_parameter(
+            "extern_mcu_stop_status_topic", "/r100_0208/platform/mcu/status/stop"
+        )
 
         # ── Gamepad / internal e-stop state ───────────────────────────────────
         self.gamepad_connected = False
@@ -136,7 +138,10 @@ class EmergencyStopNode(Node):
                 durability=DurabilityPolicy.VOLATILE,
             )
             self.create_subscription(
-                Bool, self.get_parameter("extern_emergency_stop_topic").value, self._extern_estop_cb, sub_qos
+                Bool,
+                self.get_parameter("extern_emergency_stop_topic").value,
+                self._extern_estop_cb,
+                sub_qos,
             )
             if StopStatus is not None:
                 self.create_subscription(
