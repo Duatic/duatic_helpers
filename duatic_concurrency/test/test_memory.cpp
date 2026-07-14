@@ -59,7 +59,7 @@ TEST(CacheAlignedDataWrapper, MoveConstruction)
   EXPECT_EQ(wrapper.data.first, 1);
   EXPECT_EQ(wrapper.data.second, 2);
 
-  auto moved = std::move(wrapper);
+  auto moved(std::move(wrapper));
   EXPECT_EQ(moved.data.first, 1);
   EXPECT_EQ(moved.data.second, 2);
 }
