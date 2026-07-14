@@ -1,8 +1,8 @@
 # duatic_helpers
-[![Jazzy](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/e89ebf1b2deb4b888b180f885719d8da/raw/duatic_helpers-jazzy.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
-[![Kilted](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/e89ebf1b2deb4b888b180f885719d8da/raw/duatic_helpers-kilted.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
-[![Lyrical](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/e89ebf1b2deb4b888b180f885719d8da/raw/duatic_helpers-lyrical.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
-[![Rolling](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/e89ebf1b2deb4b888b180f885719d8da/raw/duatic_helpers-rolling.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Jazzy](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-jazzy.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Kilted](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-kilted.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Lyrical](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-lyrical.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Rolling](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-rolling.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
 
 This repository contains ROS 2 related helper scripts and robotics libraries used at [Duatic](https://duatic.com).
 
