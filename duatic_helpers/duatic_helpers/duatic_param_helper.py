@@ -75,11 +75,37 @@ class DuaticParamHelper:
             if urdf_values and urdf_values[0].string_value:
                 self.node.get_logger().info(f"Successfully loaded URDF from {node_name}")
                 return urdf_values[0].string_value
-            else:
-                self.node.get_logger().warning(
-                    f"URDF parameter '{param_name}' at '{node_name}' is empty"
+
+            # Fall back: search the ROS graph for the node in any namespace. Return error if multiple matches are found.
+            matches = []
+            for name, ns in self.node.get_node_names_and_namespaces():
+                if name == node_name:
+                    full = ns.rstrip("/") + "/" + name if ns != "/" else "/" + name
+                    if full != node_name:
+                        matches.append(full)
+
+            if len(matches) > 1:
+                self.node.get_logger().error(
+                    f"Ambiguous robot_description: found multiple '{node_name}' nodes: "
+                    f"{matches}. Pass the fully-qualified node name to get_urdf() to "
+                    f"select the correct robot."
                 )
                 return None
+
+            if len(matches) == 1:
+                self.node.get_logger().info(
+                    f"Retrying URDF fetch from discovered node '{matches[0]}'"
+                )
+                urdf_values = self.get_param_values(matches[0], param_name)
+                if urdf_values and urdf_values[0].string_value:
+                    self.node.get_logger().info(f"Successfully loaded URDF from {matches[0]}")
+                    return urdf_values[0].string_value
+
+            self.node.get_logger().warning(
+                f"URDF parameter '{param_name}' at '{node_name}' is empty"
+            )
+            return None
+            
         except Exception as e:
             self.node.get_logger().warn(f"Failed to get URDF from {node_name}: {e}")
             return None
