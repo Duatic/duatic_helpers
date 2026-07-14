@@ -24,6 +24,8 @@
 
 #include <gtest/gtest.h>
 #include <utility>
+#include <thread>
+#include <atomic>
 
 #include <duatic_concurrency/unidirectional_buffer.hpp>
 
@@ -71,4 +73,48 @@ TEST(UnidirectionalBuffer, WriteAndPublish)
 TEST(UnidirectionalBuffer, Alignment)
 {
   EXPECT_EQ(alignof(UnidirectionalBuffer<int>), static_cast<size_t>(std::hardware_destructive_interference_size));
+}
+
+TEST(UnidirectionalBuffer, Multithread)
+{
+  static constexpr int c_loop_max = 10000000;
+  UnidirectionalBuffer<std::array<int, 5>> buf{ 0, 0, 0, 0, 0 };
+
+  std::jthread reader([&buf]() {
+    int last_idx = 0;
+    int checked_data = 0;
+    while (last_idx < c_loop_max) {
+      auto& data = buf.update_read();
+      EXPECT_GE(data[0], last_idx);
+      EXPECT_EQ(data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4], 0);  // XOR-Data integrity check
+      if (data[0] != last_idx) {
+        checked_data++;
+      }
+      last_idx = data[0];
+    }
+    EXPECT_GE(checked_data, c_loop_max / 1000);  // THIS IS JUST SOME EXPECTATION TO HAVE CHECKED SOMETHING !!!
+  });
+
+  std::jthread writer([&buf]() {
+    for (int i = 1; i <= c_loop_max; ++i) {
+      auto& data = buf.write();
+      data[0] = i;
+      data[1] += i;
+      data[1] *= i;
+      data[2] += data[1];
+      data[2] *= data[1];
+      data[3] += data[2];
+      data[3] *= data[2];
+      data[4] = data[0] ^ data[1] ^ data[2] ^ data[3];
+      buf.publish_write();
+    }
+  });
+
+  writer.join();
+  reader.join();
+
+  // FINAL DATA EVAL
+  auto& data = buf.update_read();
+  EXPECT_EQ(data[0], c_loop_max);
+  EXPECT_EQ(data[0] ^ data[1] ^ data[2] ^ data[3] ^ data[4], 0);  // XOR-Data integrity check
 }

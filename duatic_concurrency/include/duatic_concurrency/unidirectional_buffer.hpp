@@ -8,6 +8,12 @@
 namespace duatic::concurrency
 {
 
+/*
+ * Unidirectional buffer for lock-free single producer/single consumer data transfer.
+ *
+ * This Class offers lock-free, concurrent write and read operations, but does not support concurrent
+ * multi-producer/multi-consumer scenarios.
+ */
 template <typename Data>
 class UnidirectionalBuffer
 {
@@ -18,7 +24,7 @@ public:
 public:
   template <typename... Args>
   inline UnidirectionalBuffer(const Args&... args)
-    : buffer_{ aligned_data(args...) }, write_idx(2), buff_idx_(1), read_idx_(0)  // initialized indizes are important
+    : buffer_{ aligned_data{ args... } }, write_idx(2), buff_idx_(1), read_idx_(0)  // initialized indizes are important
   {
   }
 
