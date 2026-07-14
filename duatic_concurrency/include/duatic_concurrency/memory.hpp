@@ -15,12 +15,13 @@ struct CACHE_ALIGNED CacheAlignedDataWrapper
   value_type data;
 
   template <typename... Args>
-  explicit inline CacheAlignedDataWrapper(Args&&... args) : data(std::forward<Args>(args)...)
+    requires(sizeof...(Args) > 0) && std::is_rvalue_reference_v<Args&&...>
+  inline CacheAlignedDataWrapper(Args&&... args) : data(std::forward<Args>(args)...)
   {
   }
 
   template <typename... Args>
-  explicit inline CacheAlignedDataWrapper(const Args&... args) : data(args...)
+  inline CacheAlignedDataWrapper(const Args&... args) : data(args...)
   {
   }
 };

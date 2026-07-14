@@ -25,4 +25,16 @@ install(
 )
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_concurrency
+    test/test_memory.cpp
+    test/test_unidirectional_buffer.cpp
+  )
+  target_link_libraries(test_concurrency
+    ${PROJECT_NAME}
+  )
+endif()
+
 ament_package()
