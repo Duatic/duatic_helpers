@@ -80,7 +80,7 @@ class DuaticRobotsHelper:
             if has_wheels and has_arm:
                 self.robot_structure = "mobile_manipulator"
                 self.node.get_logger().info(
-                    "Identified robot structure: Mobile Manipulator (Base + Arm)"
+                    "Identified robot structure: Mobile Manipulator (Base + Arm/Torso)"
                 )
             elif "hip" in urdf:
                 self.robot_structure = "multi_arm"
