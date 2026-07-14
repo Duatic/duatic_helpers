@@ -18,7 +18,7 @@ on:
 
 jobs:
   ci:
-    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@test/gist-badges-verify # TEMP: verification only, switch back to @v1 before merging
+    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v1
     with:
       ros_distro: ${{ inputs.ros_distro }}
       badge_gist_id: 88e2c55697b0173e5904bc7bc224a8fd
