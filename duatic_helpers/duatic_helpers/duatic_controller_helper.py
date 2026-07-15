@@ -42,6 +42,7 @@ class DuaticControllerHelper:
             "joint_trajectory_controller",
             "cartesian_pose_controller",
             "mecanum_drive_controller",
+            "platform_velocity_controller",
             "freeze_controller",
         ]
 

@@ -1,8 +1,8 @@
 # duatic_helpers
-[![Jazzy](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-jazzy.yml)
-[![Kilted](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-kilted.yml)
-[![Lyrical](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-lyrical.yml)
-[![Rolling](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml/badge.svg?branch=main)](https://github.com/Duatic/duatic_helpers/actions/workflows/build-rolling.yml)
+[![Jazzy](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-jazzy.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Kilted](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-kilted.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Lyrical](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-lyrical.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
+[![Rolling](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/mbloechli/88e2c55697b0173e5904bc7bc224a8fd/raw/duatic_helpers-rolling.json)](https://github.com/Duatic/duatic_helpers/actions/workflows/ci.yml)
 
 This repository contains ROS 2 related helper scripts and robotics libraries used at [Duatic](https://duatic.com).
 
