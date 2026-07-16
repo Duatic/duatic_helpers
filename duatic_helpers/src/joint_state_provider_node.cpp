@@ -53,10 +53,10 @@ static std::map<std::string, JointState> joint_states_;
 
 static void on_new_joint_state(const sensor_msgs::msg::JointState& msg)
 {
-  // Go through all the fields of the message an create an entry in our joint_states_ map
-  // NOTE as we use a singlethreaded executor there is no need for locking
-  if (msg.position.size() != msg.name.size() || msg.position.size() != msg.velocity.size() ||
-      msg.position.size() != msg.effort.size()) {
+  // Check if the message is valid - all fields must have the same size
+  if (msg.position.size() != msg.name.size() ||
+      (!msg.velocity.empty() && msg.velocity.size() != msg.name.size()) ||
+      (!msg.effort.empty() && msg.effort.size() != msg.name.size())) {
     RCLCPP_ERROR_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 100,
         "Received invalid joint state message - fields do not have the same size");
     return;
