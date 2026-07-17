@@ -105,7 +105,7 @@ class DuaticParamHelper:
                 f"URDF parameter '{param_name}' at '{node_name}' is empty"
             )
             return None
-            
+
         except Exception as e:
             self.node.get_logger().warn(f"Failed to get URDF from {node_name}: {e}")
             return None
