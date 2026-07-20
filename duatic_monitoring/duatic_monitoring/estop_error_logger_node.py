@@ -53,6 +53,7 @@ from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from rclpy.serialization import deserialize_message
 from rcl_interfaces.msg import Log
 import rosbag2_py
+
 # rosbag2_py does not re-export the storage QoS type at package level; the pybind module is
 # the only way to reach it, and it is what TopicMetadata.offered_qos_profiles expects.
 from rosbag2_py._storage import QoS as BagQoS
@@ -273,8 +274,7 @@ class EStopErrorLoggerNode(Node):
         retained sample would cost us the live data from the volatile ones.
         """
         return all(
-            info.qos_profile.durability == DurabilityPolicy.TRANSIENT_LOCAL
-            for info in publishers
+            info.qos_profile.durability == DurabilityPolicy.TRANSIENT_LOCAL for info in publishers
         )
 
     @staticmethod
@@ -284,9 +284,7 @@ class EStopErrorLoggerNode(Node):
         A reliable subscription does not match a best-effort publisher, so it can only be
         requested when all of them offer reliable. Best-effort matches either.
         """
-        if all(
-            info.qos_profile.reliability == ReliabilityPolicy.RELIABLE for info in publishers
-        ):
+        if all(info.qos_profile.reliability == ReliabilityPolicy.RELIABLE for info in publishers):
             return ReliabilityPolicy.RELIABLE
         return ReliabilityPolicy.BEST_EFFORT
 
