@@ -24,9 +24,8 @@ public:
   using LinearDataType = Eigen::Vector<ScalarType, 3>;
   using AngularDataType = Eigen::Quaternion<ScalarType>;
 
-  static constexpr KinematicOrderT KinematicOrder =
-      static_cast<KinematicOrderT>(duatic::geometry::KinematicOrder::Pose);
-  static_assert(Self::KinematicOrder == 0);
+  static constexpr KinematicOrderT kinematic_order = static_cast<KinematicOrderT>(KinematicOrder::Pose);
+  static_assert(Self::kinematic_order == 0);
 
   inline constexpr KinematicVariable3DEigen() = default;
   inline constexpr KinematicVariable3DEigen(const Self& other) = default;
@@ -92,8 +91,8 @@ public:
 
   using DataType = Eigen::Vector<ScalarType, 6>;
 
-  static constexpr KinematicOrderT KinematicOrder = Order;
-  static_assert(Self::KinematicOrder > 0);
+  static constexpr KinematicOrderT kinematic_order = Order;
+  static_assert(Self::kinematic_order > 0);
 
   inline constexpr KinematicVariable3DEigen() = default;
   inline constexpr KinematicVariable3DEigen(const Self& other) = default;
@@ -187,9 +186,9 @@ inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
                       const KinematicVariable3DEigen<ScalarT, Order>& rhs)
 {
   using return_type = KinematicVariable3DEigen<ScalarT, Order + 1>;
-  static_assert(is_kinematic_diff_of_v<return_type, KinematicVariable3DEigen<ScalarT, Order>>);
+  static_assert(kinematic_diff_of<return_type, KinematicVariable3DEigen<ScalarT, Order>>::value);
 
-  if constexpr (Order == KinematicOrder::Pose) {  // special case for pose
+  if constexpr (Order == static_cast<KinematicOrderT>(KinematicOrder::Pose)) {  // special case for pose
     const Eigen::AngleAxis<ScalarT> orientation_axis(lhs.angular() * rhs.angular().conjugate());
     return return_type(lhs.linear() - rhs.linear(), orientation_axis.angle() * orientation_axis.axis());
   } else {  // everything else

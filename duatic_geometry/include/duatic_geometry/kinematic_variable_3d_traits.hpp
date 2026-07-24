@@ -10,7 +10,7 @@ namespace duatic::geometry
 // value traits
 
 template <KinematicVariable3D T, KinematicVariable3D U>
-struct is_same_kinematic_order : std::bool_constant<T::KinematicOrder == U::KinematicOrder>
+struct is_same_kinematic_order : std::bool_constant<T::kinematic_order == U::kinematic_order>
 {
 };
 
@@ -30,7 +30,7 @@ constexpr bool is_kinematic_variable_3d_helper()
 {
   if constexpr (!KinematicVariable3D<T>) {
     return false;
-  } else if constexpr (T::KinematicOrder > static_cast<KinematicOrderT>(KinematicOrder::Pose)) {
+  } else if constexpr (T::kinematic_order > static_cast<KinematicOrderT>(KinematicOrder::Pose)) {
     return KinematicDiffVariable3D<T>;
   } else {
     return true;

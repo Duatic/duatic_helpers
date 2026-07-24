@@ -31,11 +31,11 @@ using Jerk3Dd = Jerk3D<double>;
 using Snap3Dd = Snap3D<double>;
 
 // Assert concept compliance
-static_assert(KinematicVariable3D < Pose3Dd >>);
-static_assert(KinematicDiffVariable3D < Twist3Dd >>);
-static_assert(KinematicDiffVariable3D < Accel3Dd >>);
-static_assert(KinematicDiffVariable3D < Jerk3Dd >>);
-static_assert(KinematicDiffVariable3D < Snap3Dd >>);
+static_assert(KinematicVariable3D<Pose3Dd>);
+static_assert(KinematicDiffVariable3D<Twist3Dd>);
+static_assert(KinematicDiffVariable3D<Accel3Dd>);
+static_assert(KinematicDiffVariable3D<Jerk3Dd>);
+static_assert(KinematicDiffVariable3D<Snap3Dd>);
 
 // Static Assert Correct Variable Diff
 static_assert(is_kinematic_diff_of_v<Twist3Dd, Pose3Dd>);

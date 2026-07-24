@@ -1,4 +1,4 @@
-#include <duatic_geometry/trajectory.hpp>
+#include <duatic_trajectory/trajectory.hpp>
 
 namespace duatic::geometry
 {

@@ -14,7 +14,7 @@ namespace duatic::geometry
 template <typename ScalarT, KinematicOrderT Order>
 using KinematicVariable3DT = KinematicVariable3DEigen<ScalarT, Order>;
 
+}  // namespace duatic::geometry
+
 // include all derived type definitions
 #include <duatic_geometry/kinematic_types.hpp>
-
-}  // namespace duatic::geometry

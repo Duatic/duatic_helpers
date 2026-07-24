@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ostream>
+#include <string>
 #include <duatic_geometry/timed.hpp>
 
 namespace duatic::geometry
@@ -9,8 +11,8 @@ template <typename DataT, typename TimestampT>
 class Stamped : public Timed<DataT, TimestampT>
 {
 public:
-  using DataType;
-  using TimestampType;
+  using DataType = DataT;
+  using TimestampType = TimestampT;
   using Self = Stamped<DataType, TimestampType>;
 
   inline constexpr Stamped() = default;
@@ -28,7 +30,7 @@ public:
 
   inline std::string& frame_id()
   {
-    return frame_
+    return frame_;
   }
   inline const std::string& frame_id() const
   {
@@ -49,6 +51,8 @@ public:
 private:
   std::string frame_;
 };
+
+}  // namespace duatic::geometry
 
 // streaming
 template <typename DataT, typename TimeStampT>

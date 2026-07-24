@@ -61,58 +61,58 @@ public:
   }
 
   inline auto& pose()
-    requires(KinematicOrderDepth >= KinematicOrder::Pose)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Pose))
   {
-    return variable<KinematicOrder::Pose>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Pose)>();
   }
   inline const auto& pose() const
-    requires(KinematicOrderDepth >= KinematicOrder::Pose)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Pose))
   {
-    return variable<KinematicOrder::Pose>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Pose)>();
   }
 
   inline auto& twist()
-    requires(KinematicOrderDepth >= KinematicOrder::Twist)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Twist))
   {
-    return variable<KinematicOrder::Twist>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Twist)>();
   }
   inline const auto& twist() const
-    requires(KinematicOrderDepth >= KinematicOrder::Twist)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Twist))
   {
-    return variable<KinematicOrder::Twist>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Twist)>();
   }
 
   inline auto& accel()
-    requires(KinematicOrderDepth >= KinematicOrder::Accel)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Accel))
   {
-    return variable<KinematicOrder::Accel>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Accel)>();
   }
   inline const auto& accel() const
-    requires(KinematicOrderDepth >= KinematicOrder::Accel)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Accel))
   {
-    return variable<KinematicOrder::Accel>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Accel)>();
   }
 
   inline auto& jerk()
-    requires(KinematicOrderDepth >= KinematicOrder::Jerk)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Jerk))
   {
-    return variable<KinematicOrder::Jerk>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Jerk)>();
   }
   inline const auto& jerk() const
-    requires(KinematicOrderDepth >= KinematicOrder::Jerk)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Jerk))
   {
-    return variable<KinematicOrder::Jerk>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Jerk)>();
   }
 
   inline auto& snap()
-    requires(KinematicOrderDepth >= KinematicOrder::Snap)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Snap))
   {
-    return variable<KinematicOrder::Snap>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Snap)>();
   }
   inline const auto& snap() const
-    requires(KinematicOrderDepth >= KinematicOrder::Snap)
+    requires(KinematicOrderDepth >= static_cast<KinematicOrderT>(KinematicOrder::Snap))
   {
-    return variable<KinematicOrder::Snap>();
+    return variable<static_cast<KinematicOrderT>(KinematicOrder::Snap)>();
   }
 
   template <KinematicOrderT... Orders>
@@ -144,17 +144,6 @@ private:
 
   VariablesTuple variables_;
 };
-
-// Type Defs
-template <typename ScalarT = double>
-using TimedState3D = Timed<State3D<ScalarT>>;
-template <typename ScalarT = double>
-using StampedState3D = Stamped<State3D<ScalarT>>;
-
-// Explicit Types
-using State3Dd = State3D<double>;
-using TimedState3Dd = TimedState3D<double>;
-using StampedState3Dd = StampedState3D<double>;
 
 // streaming
 template <typename ScalarT, KinematicOrderT OrderDepth,

@@ -21,7 +21,7 @@ static_assert(std::is_same_v<std::underlying_type_t<KinematicOrder>, KinematicOr
 // Unconstrained (not KinematicVariable3D-constrained) so it can be used from within
 // KinematicVariable3D's own definition without a self-referential constraint.
 template <typename DIFF, typename OF>
-struct kinematic_diff_of : std::bool_constant<DIFF::KinematicOrder == OF::KinematicOrder + 1>
+struct kinematic_diff_of : std::bool_constant<DIFF::kinematic_order == OF::kinematic_order + 1>
 {
 };
 
@@ -38,8 +38,8 @@ concept KinematicVariable3D = requires(T& variable, const T& const_variable) {
   { variable.setAngularNeutral() } -> std::same_as<T&>;
   { variable.setNeutral() } -> std::same_as<T&>;
 
-  { T::KinematicOrder } -> std::convertible_to<KinematicOrderT>;
-  typename std::integral_constant<KinematicOrderT, T::KinematicOrder>;
+  { T::kinematic_order } -> std::convertible_to<KinematicOrderT>;
+  typename std::integral_constant<KinematicOrderT, T::kinematic_order>;
 
   { const_variable - const_variable };
   requires kinematic_diff_of<std::remove_cvref_t<decltype(const_variable - const_variable)>, T>::value;

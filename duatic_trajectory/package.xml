@@ -1,18 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>duatic_geometry</name>
+  <name>duatic_trajectory</name>
   <version>0.0.0</version>
-  <description>Eigen3-based Geometry utilities for Duatic controllers.</description>
+  <description>Trajectory generation and evaluation built on top of duatic_geometry.</description>
   <maintainer email="pvonwirth@duatic.de">Patrick Vonwirth</maintainer>
   <license>BSD3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>ament_cmake_gtest</test_depend>
-
-  <depend>eigen</depend>
-  <depend>eigen3_cmake_module</depend>
+  <depend>duatic_geometry</depend>
   <depend>rclcpp</depend>
 
   <export>
