@@ -21,6 +21,8 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+import re
+
 import rclpy
 from rclpy.node import Node
 
@@ -72,7 +74,8 @@ class DuaticRobotsHelper:
         """Try to identify robot structure from URDF."""
         urdf_raw = self.param_helper.get_urdf()
         if urdf_raw:
-            urdf = urdf_raw.lower()
+            # Strip XML comments to ensure keyword matching only hits joint/link names
+            urdf = re.sub(r"<!--.*?-->", "", urdf_raw, flags=re.DOTALL).lower()
             # Priority based identification to avoid mis-detecting rovers with arm metadata
             # Morphology-based identification
             has_wheels = "wheel" in urdf
