@@ -74,7 +74,7 @@ public:
   inline void publish_write()
   {
     // atomic swap indizes with update indication
-    write_idx = buff_idx_.exchange(write_idx | update_flag, std::memory_order_release) &
+    write_idx = buff_idx_.exchange(write_idx | update_flag, std::memory_order_acq_rel) &
                 addr_mask;  // always store with update flag and remove the update flag on load
     assert((write_idx < buffer_size) && "Invariance Violation: write_idx out of bounds. "
                                         "There is something serious going wrong here!");
@@ -101,7 +101,7 @@ public:
         buff_idx_.load(std::memory_order_acquire) & update_flag;  // mask with update bit
     if (update_available) {  // update dst data copy only if there is an update available
       // atomic update dst data copy
-      read_idx_ = buff_idx_.exchange(read_idx_, std::memory_order_acquire) &
+      read_idx_ = buff_idx_.exchange(read_idx_, std::memory_order_acq_rel) &
                   addr_mask;  // always remove the update flag and store without
       assert((read_idx_ < buffer_size) && "Invariance Violation: read_idx_ out of bounds. "
                                           "There is something serious going wrong here!");
