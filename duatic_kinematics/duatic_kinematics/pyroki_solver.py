@@ -336,7 +336,8 @@ class PyrokiIKSolver:
             wxyzs.append(jnp.array(pose.rotation().wxyz))
         return np.array(positions, dtype=np.float32), np.array(wxyzs, dtype=np.float32)
 
-    def solve(self, target_link_name, target_pos, target_wxyz, prev_cfg, joint_mask=None):
+    def solve(self, target_link_name, target_pos, target_wxyz, prev_cfg,
+              joint_mask=None, rest_cfg=None):
         """
         Solve IK for a single target link.
 
@@ -344,8 +345,18 @@ class PyrokiIKSolver:
             target_link_name: Name of the target link (e.g. "flange", "arm_left/flange")
             target_pos: (3,) target position
             target_wxyz: (4,) target quaternion (wxyz format)
-            prev_cfg: (n_actuated,) previous joint config — used as initial guess and rest pose
+            prev_cfg: (n_actuated,) previous joint config — the initial guess, and
+                the rest pose unless rest_cfg is given
             joint_mask: (n_actuated,) optional, 1.0=optimize, 0.0=lock. Default: all 1.0.
+            rest_cfg: (n_actuated,) optional rest-pose target for the
+                regularization cost, decoupled from the initial guess. Pass a
+                reference posture here to steer which of several valid solutions
+                is chosen — an elbow-up reference keeps the arm reaching over an
+                object instead of scooping under it. Leaving it at prev_cfg pulls
+                the solution towards wherever the arm happens to be, which is
+                actively harmful once the arm sits in a bad spot: a config that
+                is snagged on the environment then attracts the solve and the
+                result is off by 10 cm or more.
 
         Returns:
             (cfg, pos_error, ori_error)
@@ -358,6 +369,8 @@ class PyrokiIKSolver:
 
         prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
         initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
+        rest_cfg_np = (prev_cfg_np if rest_cfg is None
+                       else jnp.asarray(rest_cfg, dtype=jnp.float32))
 
         cfg = _solve_ik(
             self.robot,
@@ -366,7 +379,7 @@ class PyrokiIKSolver:
             jnp.array(target_wxyz, dtype=jnp.float32),
             jnp.array(target_pos, dtype=jnp.float32),
             jnp.array(joint_mask, dtype=jnp.float32),
-            jnp.array(prev_cfg_np, dtype=jnp.float32),
+            jnp.array(rest_cfg_np, dtype=jnp.float32),
             jnp.array(initial_cfg_np, dtype=jnp.float32),
             self_collision_weight=self.self_collision_weight,
             self_collision_margin=self.self_collision_margin,
