@@ -24,17 +24,6 @@ public:
   template <KinematicOrder Order>
   using KinematicVariable3DType = KinematicVariable3DTT<ScalarType, Order>;
 
-  using PoseType =
-      std::enable_if_t<(KinematicOrderDepth >= KinematicOrder::Pose), KinematicVariable3DType<KinematicOrder::Pose>>;
-  using TwistType =
-      std::enable_if_t<(KinematicOrderDepth >= KinematicOrder::Twist), KinematicVariable3DType<KinematicOrder::Twist>>;
-  using AccelType =
-      std::enable_if_t<(KinematicOrderDepth >= KinematicOrder::Accel), KinematicVariable3DType<KinematicOrder::Accel>>;
-  using JerkType =
-      std::enable_if_t<(KinematicOrderDepth >= KinematicOrder::Jerk), KinematicVariable3DType<KinematicOrder::Jerk>>;
-  using SnapType =
-      std::enable_if_t<(KinematicOrderDepth >= KinematicOrder::Snap), KinematicVariable3DType<KinematicOrder::Snap>>;
-
   inline constexpr KinematicState() = default;
   inline constexpr KinematicState(const Self& other) = default;
   inline constexpr KinematicState(Self&& other) = default;

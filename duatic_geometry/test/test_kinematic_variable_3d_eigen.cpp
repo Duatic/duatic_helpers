@@ -218,6 +218,76 @@ TEST(KinematicVariable3DEigenOperators, MinusOperatorProducesTheNextHigherOrder)
   EXPECT_TRUE(twist_diff.vector().isApprox(t1.vector()));
 }
 
+TEST(KinematicVariable3DEigenOperators, PlusOperatorAddsADiffBackOntoTheBaseOrder)
+{
+  const Pose p1(Eigen::Vector3d(1, 2, 3),
+                Eigen::Quaterniond(Eigen::AngleAxisd(0.7, Eigen::Vector3d(1, 0, 0).normalized())));
+  const Pose p2(Eigen::Vector3d(0, 0, 0),
+                Eigen::Quaterniond(Eigen::AngleAxisd(0.9, Eigen::Vector3d(0, 1, 0).normalized())));
+
+  const auto pose_diff = p1 - p2;
+  static_assert(std::is_same_v<decltype(pose_diff), const Twist>);
+
+  const auto reconstructed_pose = p2 + pose_diff;
+  static_assert(std::is_same_v<decltype(reconstructed_pose), const Pose>);
+  EXPECT_TRUE(reconstructed_pose.linear().isApprox(p1.linear()));
+  // A quaternion and its negation represent the same rotation.
+  EXPECT_TRUE(reconstructed_pose.angular().isApprox(p1.angular()) ||
+              reconstructed_pose.angular().coeffs().isApprox(-p1.angular().coeffs()));
+
+  const Twist t1(Eigen::Vector3d(1, 1, 1), Eigen::Vector3d(2, 2, 2));
+  const Twist t2(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, 0));
+
+  const auto twist_diff = t1 - t2;
+  static_assert(std::is_same_v<decltype(twist_diff), const Accel>);
+
+  const auto reconstructed_twist = t2 + twist_diff;
+  static_assert(std::is_same_v<decltype(reconstructed_twist), const Twist>);
+  EXPECT_TRUE(reconstructed_twist.vector().isApprox(t1.vector()));
+}
+
+TEST(KinematicVariable3DEigenOperators, PlusOperatorHandlesZeroRotationDiffWithoutNaN)
+{
+  const Pose p1(Eigen::Vector3d(5, 5, 5), Eigen::Quaterniond::Identity());
+  const Pose p2(Eigen::Vector3d(0, 0, 0), Eigen::Quaterniond::Identity());
+
+  const auto pose_diff = p1 - p2;
+  const auto reconstructed_pose = p2 + pose_diff;
+
+  EXPECT_TRUE(reconstructed_pose.angular().coeffs().allFinite());
+  EXPECT_TRUE(reconstructed_pose.linear().isApprox(p1.linear()));
+  EXPECT_TRUE(reconstructed_pose.angular().isApprox(p1.angular()));
+}
+
+TEST(KinematicVariable3DEigenOperators, MinusOperatorSubtractsADiffFromTheBaseOrder)
+{
+  const Pose base(Eigen::Vector3d(1, 2, 3),
+                  Eigen::Quaterniond(Eigen::AngleAxisd(0.7, Eigen::Vector3d(1, 0, 0).normalized())));
+  const Twist diff(Eigen::Vector3d(0.5, -0.5, 1.0), Eigen::Vector3d(0.2, 0.1, -0.3));
+
+  const auto reduced = base - diff;
+  static_assert(std::is_same_v<decltype(reduced), const Pose>);
+
+  const auto round_trip = reduced + diff;
+  EXPECT_TRUE(round_trip.linear().isApprox(base.linear(), 1e-9));
+  EXPECT_TRUE(round_trip.angular().isApprox(base.angular(), 1e-9) ||
+              round_trip.angular().coeffs().isApprox(-base.angular().coeffs(), 1e-9));
+
+  const Twist t(Eigen::Vector3d(1, 2, 3), Eigen::Vector3d(4, 5, 6));
+  const Accel a(Eigen::Vector3d(0.1, 0.2, 0.3), Eigen::Vector3d(0.4, 0.5, 0.6));
+
+  const auto reduced_twist = t - a;
+  static_assert(std::is_same_v<decltype(reduced_twist), const Twist>);
+  EXPECT_TRUE((reduced_twist + a).vector().isApprox(t.vector(), 1e-9));
+}
+
+TEST(KinematicVariable3DEigenOperators, UnaryMinusNegatesTheVector)
+{
+  const Twist t(Eigen::Vector3d(1, 2, 3), Eigen::Vector3d(4, 5, 6));
+  const Twist negated = -t;
+  EXPECT_TRUE(negated.vector().isApprox(-t.vector()));
+}
+
 TEST(KinematicVariable3DEigenOperators, StreamingOperatorProducesNonEmptyOutput)
 {
   Pose pose;

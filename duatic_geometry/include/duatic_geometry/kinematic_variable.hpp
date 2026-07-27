@@ -43,6 +43,7 @@ concept KinematicDiffVariable =
       requires(!std::is_void_v<decltype(variable.vector())>);
       requires(!std::is_void_v<decltype(const_variable.vector())>);
 
+      { -const_variable } -> std::same_as<T>;
       { variable += const_variable } -> std::same_as<T&>;
       { variable -= const_variable } -> std::same_as<T&>;
       { variable *= scalar } -> std::same_as<T&>;

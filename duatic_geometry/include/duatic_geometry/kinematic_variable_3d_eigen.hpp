@@ -2,6 +2,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <limits>
 #include <ostream>
 #include <utility>
 #include <duatic_geometry/kinematic_variable.hpp>
@@ -176,6 +177,11 @@ public:
     return *this;
   }
 
+  inline Self operator-() const
+  {
+    return Self(-vector_);
+  }
+
 private:
   DataType vector_;
 };
@@ -193,6 +199,35 @@ inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
     return return_type(lhs.linear() - rhs.linear(), orientation_axis.angle() * orientation_axis.axis());
   } else {  // everything else
     return return_type(lhs.vector() - rhs.vector());
+  }
+}
+
+// special '-' operator declared outside to avoid infinite type recursion
+template <typename ScalarT, KinematicOrder Order>
+inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
+                      const KinematicVariable3DEigen<ScalarT, Order + 1>& rhs)
+{
+  return lhs + (-rhs);
+}
+
+// special '+' operator declared outside to avoid infinite type recursion
+template <typename ScalarT, KinematicOrder Order>
+inline auto operator+(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
+                      const KinematicVariable3DEigen<ScalarT, Order + 1>& rhs)
+{
+  using return_type = KinematicVariable3DEigen<ScalarT, Order>;
+
+  if constexpr (Order == KinematicOrder::Pose) {  // special case for pose
+    const ScalarT angle = rhs.angular().norm();
+    if (angle < std::numeric_limits<ScalarT>::epsilon()) {
+      return return_type(lhs.linear() + rhs.linear(), lhs.angular());
+    } else {
+      const Eigen::Quaternion<ScalarT> orientation_diff =
+          Eigen::Quaternion<ScalarT>(Eigen::AngleAxis<ScalarT>(angle, rhs.angular() / angle));
+      return return_type(lhs.linear() + rhs.linear(), (orientation_diff * lhs.angular()).normalized());
+    }
+  } else {  // everything else
+    return return_type(lhs.vector() + rhs.vector());
   }
 }
 
