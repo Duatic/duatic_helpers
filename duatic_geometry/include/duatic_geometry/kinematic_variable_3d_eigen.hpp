@@ -4,28 +4,28 @@
 #include <Eigen/Geometry>
 #include <ostream>
 #include <utility>
-#include <duatic_geometry/kinematic_variable_3d.hpp>
-#include <duatic_geometry/kinematic_variable_3d_traits.hpp>
+#include <duatic_geometry/kinematic_variable.hpp>
+#include <duatic_geometry/kinematic_variable_traits.hpp>
 
 namespace duatic::geometry
 {
 
-template <typename ScalarT, KinematicOrderT Order>
+template <typename ScalarT, KinematicOrder Order>
 class KinematicVariable3DEigen;
 
 // Pose concretisation: linear part is a cartesian vector, angular part is a quaternion
 template <typename ScalarT>
-class KinematicVariable3DEigen<ScalarT, static_cast<KinematicOrderT>(KinematicOrder::Pose)>
+class KinematicVariable3DEigen<ScalarT, KinematicOrder::Pose>
 {
 public:
   using ScalarType = ScalarT;
-  using Self = KinematicVariable3DEigen<ScalarType, static_cast<KinematicOrderT>(KinematicOrder::Pose)>;
+  using Self = KinematicVariable3DEigen<ScalarType, KinematicOrder::Pose>;
 
   using LinearDataType = Eigen::Vector<ScalarType, 3>;
   using AngularDataType = Eigen::Quaternion<ScalarType>;
 
-  static constexpr KinematicOrderT kinematic_order = static_cast<KinematicOrderT>(KinematicOrder::Pose);
-  static_assert(Self::kinematic_order == 0);
+  static constexpr KinematicOrder kinematic_order = KinematicOrder::Pose;
+  static_assert(Self::kinematic_order == KinematicOrder::Pose);
 
   inline constexpr KinematicVariable3DEigen() = default;
   inline constexpr KinematicVariable3DEigen(const Self& other) = default;
@@ -82,7 +82,7 @@ private:
 
 // Generic concretisation: a 3D linear/angular pair backed by a single 6D vector, used for every
 // derivative order beyond the pose itself (twist, acceleration, jerk, snap, ...).
-template <typename ScalarT, KinematicOrderT Order>
+template <typename ScalarT, KinematicOrder Order>
 class KinematicVariable3DEigen
 {
 public:
@@ -91,8 +91,8 @@ public:
 
   using DataType = Eigen::Vector<ScalarType, 6>;
 
-  static constexpr KinematicOrderT kinematic_order = Order;
-  static_assert(Self::kinematic_order > 0);
+  static constexpr KinematicOrder kinematic_order = Order;
+  static_assert(Self::kinematic_order > KinematicOrder::Pose);
 
   inline constexpr KinematicVariable3DEigen() = default;
   inline constexpr KinematicVariable3DEigen(const Self& other) = default;
@@ -181,14 +181,14 @@ private:
 };
 
 // special '-' operator declared outside to avoid infinite type recursion
-template <typename ScalarT, KinematicOrderT Order>
+template <typename ScalarT, KinematicOrder Order>
 inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
                       const KinematicVariable3DEigen<ScalarT, Order>& rhs)
 {
   using return_type = KinematicVariable3DEigen<ScalarT, Order + 1>;
   static_assert(kinematic_diff_of<return_type, KinematicVariable3DEigen<ScalarT, Order>>::value);
 
-  if constexpr (Order == static_cast<KinematicOrderT>(KinematicOrder::Pose)) {  // special case for pose
+  if constexpr (Order == KinematicOrder::Pose) {  // special case for pose
     const Eigen::AngleAxis<ScalarT> orientation_axis(lhs.angular() * rhs.angular().conjugate());
     return return_type(lhs.linear() - rhs.linear(), orientation_axis.angle() * orientation_axis.axis());
   } else {  // everything else

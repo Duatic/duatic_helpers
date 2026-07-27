@@ -41,11 +41,11 @@ TEST(KinematicVariable3DEigenTypes, ScalarTypeIsPropagated)
 
 TEST(KinematicVariable3DEigenTypes, KinematicOrderValuesAreCorrect)
 {
-  static_assert(Pose::kinematic_order == static_cast<KinematicOrderT>(KinematicOrder::Pose));
-  static_assert(Twist::kinematic_order == static_cast<KinematicOrderT>(KinematicOrder::Twist));
-  static_assert(Accel::kinematic_order == static_cast<KinematicOrderT>(KinematicOrder::Accel));
-  static_assert(Jerk::kinematic_order == static_cast<KinematicOrderT>(KinematicOrder::Jerk));
-  static_assert(Snap::kinematic_order == static_cast<KinematicOrderT>(KinematicOrder::Snap));
+  static_assert(Pose::kinematic_order == KinematicOrder::Pose);
+  static_assert(Twist::kinematic_order == KinematicOrder::Twist);
+  static_assert(Accel::kinematic_order == KinematicOrder::Accel);
+  static_assert(Jerk::kinematic_order == KinematicOrder::Jerk);
+  static_assert(Snap::kinematic_order == KinematicOrder::Snap);
   SUCCEED();
 }
 
@@ -71,17 +71,17 @@ TEST(KinematicVariable3DEigenTypes, DiffOrdersShareA6DVectorRepresentation)
 
 TEST(KinematicVariable3DEigenConcepts, PoseSatisfiesOnlyTheBaseConcept)
 {
-  static_assert(KinematicVariable3D<Pose>);
-  static_assert(!KinematicDiffVariable3D<Pose>);
+  static_assert(KinematicVariable<Pose>);
+  static_assert(!KinematicDiffVariable<Pose>);
   SUCCEED();
 }
 
 TEST(KinematicVariable3DEigenConcepts, HigherOrdersSatisfyTheDiffConcept)
 {
-  static_assert(KinematicDiffVariable3D<Twist>);
-  static_assert(KinematicDiffVariable3D<Accel>);
-  static_assert(KinematicDiffVariable3D<Jerk>);
-  static_assert(KinematicDiffVariable3D<Snap>);
+  static_assert(KinematicDiffVariable<Twist>);
+  static_assert(KinematicDiffVariable<Accel>);
+  static_assert(KinematicDiffVariable<Jerk>);
+  static_assert(KinematicDiffVariable<Snap>);
   SUCCEED();
 }
 
@@ -136,11 +136,11 @@ TEST(KinematicVariable3DEigenTraits, IsSameKinematicOrderDistinguishesOrders)
 
 TEST(KinematicVariable3DEigenTraits, IsKinematicVariable3DAcceptsAllFiveConcretisations)
 {
-  static_assert(is_kinematic_variable_3d_v<Pose>);
-  static_assert(is_kinematic_variable_3d_v<Twist>);
-  static_assert(is_kinematic_variable_3d_v<Accel>);
-  static_assert(is_kinematic_variable_3d_v<Jerk>);
-  static_assert(is_kinematic_variable_3d_v<Snap>);
+  static_assert(is_kinematic_variable_v<Pose>);
+  static_assert(is_kinematic_variable_v<Twist>);
+  static_assert(is_kinematic_variable_v<Accel>);
+  static_assert(is_kinematic_variable_v<Jerk>);
+  static_assert(is_kinematic_variable_v<Snap>);
   SUCCEED();
 }
 
