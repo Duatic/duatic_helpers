@@ -83,6 +83,54 @@ def _limit_margin_residual(
 _limit_margin_cost = jaxls.Cost.factory(_limit_margin_residual)
 
 
+def _soft_range_residual(
+    vals: jaxls.VarValues,
+    joint_var: jaxls.Var[jax.Array],
+    indices: jax.Array,
+    lower: jax.Array,
+    upper: jax.Array,
+    weights: jax.Array,
+) -> jax.Array:
+    """Cost for leaving a preferred range, zero inside it.
+
+    Not a limit — the URDF limits still apply and are enforced separately. This
+    expresses "possible, but pay for it", which is what a thermal, wear or
+    reachability preference needs: forbidding the range outright would make
+    poses unreachable that a robot must sometimes assume anyway, while a cost
+    makes the solver stay out of it unless there is no alternative.
+
+    Ranges and weights come from the caller; nothing here knows which joints of
+    which robot they belong to.
+    """
+    cfg = vals[joint_var][indices]
+    over = jnp.maximum(0.0, cfg - upper)
+    under = jnp.maximum(0.0, lower - cfg)
+    return ((over + under) * weights).flatten()
+
+
+def _joint_continuity_residual(
+    vals: jaxls.VarValues,
+    joint_var: jaxls.Var[jax.Array],
+    indices: jax.Array,
+    prev_cfg: jax.Array,
+    weights: jax.Array,
+) -> jax.Array:
+    """Cost for moving selected joints away from their previous value.
+
+    Intended for joints that can reach the same pose through a different
+    branch — typically the rotational ones. Without this the solver may hand
+    back a solution that flips such a joint by half a turn between two
+    neighbouring points of a path. Stronger than the global rest_cost because it
+    applies to those joints only.
+    """
+    cfg = vals[joint_var]
+    return ((cfg[indices] - prev_cfg[indices]) * weights).flatten()
+
+
+_soft_range_cost = jaxls.Cost.factory(_soft_range_residual)
+_joint_continuity_cost = jaxls.Cost.factory(_joint_continuity_residual)
+
+
 @jdc.jit
 def _solve_ik(
     robot: pk.Robot,
@@ -93,6 +141,13 @@ def _solve_ik(
     joint_mask: jax.Array,
     prev_cfg: jax.Array,
     initial_cfg: jax.Array,
+    cont_reference: jax.Array,
+    soft_indices: jax.Array,
+    soft_lower: jax.Array,
+    soft_upper: jax.Array,
+    soft_weights: jax.Array,
+    cont_indices: jax.Array,
+    cont_weights: jax.Array,
     self_collision_weight: float = 10.0,
     self_collision_margin: float = 0.01,
     limit_margin: float = 0.15,
@@ -103,6 +158,18 @@ def _solve_ik(
     prev_cfg is used as the rest-pose regularization target.
     initial_cfg is used as the optimization starting point (may differ from prev_cfg
     to break singularities).
+
+    soft_* describe preferred joint ranges (see _soft_range_residual) and cont_*
+    the joints held near their previous value (see _joint_continuity_residual).
+    Both are passed as index arrays rather than names so this stays jittable;
+    empty arrays disable them.
+
+    cont_reference is what the continuity cost measures against, and is
+    deliberately NOT prev_cfg: prev_cfg is the rest pose, a fixed reference the
+    whole path shares, whereas continuity has to compare against the previous
+    point's own solution. Using the rest pose for both would just be a second,
+    differently weighted rest cost and would not stop a branch flip between two
+    neighbouring points.
     """
     joint_var = robot.joint_var_cls(0)
 
@@ -139,6 +206,19 @@ def _solve_ik(
             joint_var,
             margin=limit_margin,
             weight=limit_margin_weight,
+        ),
+        _soft_range_cost(
+            joint_var,
+            soft_indices,
+            soft_lower,
+            soft_upper,
+            soft_weights,
+        ),
+        _joint_continuity_cost(
+            joint_var,
+            cont_indices,
+            cont_reference,
+            cont_weights,
         ),
     ]
 
@@ -270,6 +350,8 @@ class PyrokiIKSolver:
         self_collision_weight=10.0,
         self_collision_margin=0.01,
         singularity_nudge_joints=None,
+        soft_ranges=None,
+        continuity_joints=None,
     ):
         """
         Args:
@@ -280,6 +362,16 @@ class PyrokiIKSolver:
                 values (rad). When the robot config is near-zero (singular), matching
                 joints are nudged to help the optimizer escape.
                 Example: {"elbow_flexion": -0.3, "shoulder_flexion": 0.2}
+            soft_ranges: optional dict of joint name pattern -> (lower, upper, weight).
+                Preferred ranges, not limits: leaving one costs, it is not forbidden.
+                Use it for thermal, wear or reachability preferences that must not
+                make a pose unreachable. Which joints and which values is the
+                caller's business — a pattern matching none of this robot's joints
+                contributes nothing, so no per-robot special case is needed here.
+            continuity_joints: optional dict of joint name pattern -> weight, holding
+                those joints near the configuration passed as the solve's seed. Use
+                it for joints that could otherwise reach the same pose through a
+                flipped branch.
         """
         if isinstance(urdf_input, yourdfpy.URDF):
             urdf_obj = urdf_input
@@ -298,6 +390,32 @@ class PyrokiIKSolver:
                 indices = [i for i, n in enumerate(self.joint_names) if pattern in n]
                 if indices:
                     self._nudge_config[pattern] = (indices, nudge_val)
+
+        # Resolve the preference patterns to index arrays once. They are handed to
+        # the jitted solve as arrays rather than names, and an empty array simply
+        # contributes nothing — so a robot without these joints needs no special
+        # case anywhere.
+        idx, lo, hi, w = [], [], [], []
+        for pattern, (lower, upper, weight) in (soft_ranges or {}).items():
+            for i, name in enumerate(self.joint_names):
+                if pattern in name:
+                    idx.append(i)
+                    lo.append(float(lower))
+                    hi.append(float(upper))
+                    w.append(float(weight))
+        self._soft_idx = jnp.array(idx, dtype=jnp.int32)
+        self._soft_lower = jnp.array(lo, dtype=jnp.float32)
+        self._soft_upper = jnp.array(hi, dtype=jnp.float32)
+        self._soft_weights = jnp.array(w, dtype=jnp.float32)
+
+        cidx, cw = [], []
+        for pattern, weight in (continuity_joints or {}).items():
+            for i, name in enumerate(self.joint_names):
+                if pattern in name and i not in cidx:
+                    cidx.append(i)
+                    cw.append(float(weight))
+        self._cont_idx = jnp.array(cidx, dtype=jnp.int32)
+        self._cont_weights = jnp.array(cw, dtype=jnp.float32)
 
     def _nudge_near_zero(self, cfg: jnp.ndarray, thresh: float = 0.08) -> jnp.ndarray:
         """If cfg is near-zero (singular), nudge configured joints to help the optimizer.
@@ -337,7 +455,7 @@ class PyrokiIKSolver:
         return np.array(positions, dtype=np.float32), np.array(wxyzs, dtype=np.float32)
 
     def solve(self, target_link_name, target_pos, target_wxyz, prev_cfg,
-              joint_mask=None, rest_cfg=None):
+              joint_mask=None, rest_cfg=None, soft_scale=1.0):
         """
         Solve IK for a single target link.
 
@@ -348,6 +466,13 @@ class PyrokiIKSolver:
             prev_cfg: (n_actuated,) previous joint config — the initial guess, and
                 the rest pose unless rest_cfg is given
             joint_mask: (n_actuated,) optional, 1.0=optimize, 0.0=lock. Default: all 1.0.
+            soft_scale: multiplier on the configured soft-range weights for this
+                one solve. 0.0 switches them off, 1.0 applies them as configured.
+                Needed because such a preference is often conditional: a thermal
+                limit on holding a load says nothing about how the arm got there,
+                and applying it to the whole motion can make the approach itself
+                unreachable. Only the weights are scaled, never the index set, so
+                switching it per call costs no re-compilation of the solve.
             rest_cfg: (n_actuated,) optional rest-pose target for the
                 regularization cost, decoupled from the initial guess. Pass a
                 reference posture here to steer which of several valid solutions
@@ -381,6 +506,13 @@ class PyrokiIKSolver:
             jnp.array(joint_mask, dtype=jnp.float32),
             jnp.array(rest_cfg_np, dtype=jnp.float32),
             jnp.array(initial_cfg_np, dtype=jnp.float32),
+            jnp.array(prev_cfg_np, dtype=jnp.float32),
+            self._soft_idx,
+            self._soft_lower,
+            self._soft_upper,
+            self._soft_weights * float(soft_scale),
+            self._cont_idx,
+            self._cont_weights,
             self_collision_weight=self.self_collision_weight,
             self_collision_margin=self.self_collision_margin,
         )
