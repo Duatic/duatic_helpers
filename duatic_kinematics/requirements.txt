@@ -1,15 +1,5 @@
-# General math
-numpy
-
-# JAX ecosystem
-jax
-jaxlib
-jaxlie
-jaxls
-jax_dataclasses
-
-# URDF parsing
-yourdfpy
-
-# PyRoki: Robot Kinematics Library (directly from GitHub)
-git+https://github.com/dfki-ric/pyroki.git@main
+numpy<2.0.0
+jax>=0.6.0
+jaxlib>=0.6.0
+jax-dataclasses>=1.6.2
+git+https://github.com/chungmin99/pyroki.git
