@@ -22,7 +22,7 @@ TEST(KinematicTrajectoryExponentialApproach, EvaluateAtUpdateTimeReproducesTheIn
 {
   const geometry::Pose3Dd x0 = makePose(1, 2, 3, Eigen::Quaterniond::Identity());
   const geometry::Twist3Dd v0(Eigen::Vector3d(0.1, -0.2, 0.3), Eigen::Vector3d(0, 0, 0));
-  const geometry::StateToTwist3Dd current_state(x0, v0);
+  const geometry::StateTwist3Dd current_state(x0, v0);
 
   const rclcpp::Time start_time(0, 0);
   const PoseTrajectory::KinematicUpdateState in_state(start_time, current_state);
@@ -41,7 +41,7 @@ TEST(KinematicTrajectoryExponentialApproach, PoseDepthConvergesToTheGoalOverTime
   const geometry::Pose3Dd x0 =
       makePose(5, -3, 2, Eigen::Quaterniond(Eigen::AngleAxisd(0.6, Eigen::Vector3d(0, 0, 1))));
   const geometry::Twist3Dd v0(Eigen::Vector3d(1, 1, 1), Eigen::Vector3d(0.1, 0.1, 0.1));
-  const geometry::StateToTwist3Dd current_state(x0, v0);
+  const geometry::StateTwist3Dd current_state(x0, v0);
 
   const rclcpp::Time start_time(0, 0);
   const PoseTrajectory::KinematicUpdateState in_state(start_time, current_state);
@@ -62,7 +62,7 @@ TEST(KinematicTrajectoryExponentialApproach, TwistDepthReproducesTheInitialPoseA
 {
   const geometry::Pose3Dd x0 = makePose(1, 2, 3, Eigen::Quaterniond::Identity());
   const geometry::Twist3Dd v0(Eigen::Vector3d(0.1, -0.2, 0.3), Eigen::Vector3d(0.05, 0, 0));
-  const geometry::StateToTwist3Dd current_state(x0, v0);
+  const geometry::StateTwist3Dd current_state(x0, v0);
 
   const rclcpp::Time start_time(0, 0);
   const TwistTrajectory::KinematicUpdateState in_state(start_time, current_state);
@@ -83,7 +83,7 @@ TEST(KinematicTrajectoryExponentialApproach, TwistDepthConvergesToTheGoalWithVan
   const geometry::Pose3Dd x0 =
       makePose(5, -3, 2, Eigen::Quaterniond(Eigen::AngleAxisd(0.6, Eigen::Vector3d(0, 0, 1))));
   const geometry::Twist3Dd v0(Eigen::Vector3d(1, 1, 1), Eigen::Vector3d(0.1, 0.1, 0.1));
-  const geometry::StateToTwist3Dd current_state(x0, v0);
+  const geometry::StateTwist3Dd current_state(x0, v0);
 
   const rclcpp::Time start_time(0, 0);
   const TwistTrajectory::KinematicUpdateState in_state(start_time, current_state);
@@ -106,7 +106,7 @@ TEST(KinematicTrajectoryExponentialApproach, OutParamAndByValueEvaluateAgree)
 {
   const geometry::Pose3Dd x0 = makePose(1, 2, 3, Eigen::Quaterniond::Identity());
   const geometry::Twist3Dd v0(Eigen::Vector3d(0.1, -0.2, 0.3), Eigen::Vector3d(0, 0, 0));
-  const geometry::StateToTwist3Dd current_state(x0, v0);
+  const geometry::StateTwist3Dd current_state(x0, v0);
 
   const rclcpp::Time start_time(0, 0);
   const TwistTrajectory::KinematicUpdateState in_state(start_time, current_state);

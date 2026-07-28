@@ -35,4 +35,5 @@ class FactoryEncoder
 }  // namespace duatic_geometry_msgs
 
 // include template instantiations
+#include <duatic_geometry_msgs/encoder_kinematic_state.hpp>
 #include <duatic_geometry_msgs/encoder_kinematic_variable.hpp>

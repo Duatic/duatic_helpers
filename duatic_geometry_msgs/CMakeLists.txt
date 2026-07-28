@@ -14,8 +14,12 @@ find_package(duatic_geometry REQUIRED)
 find_package(rclcpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/State.msg"
-  "msg/StateStamped.msg"
+  "msg/StatePose.msg"
+  "msg/StatePoseStamped.msg"
+  "msg/StateTwist.msg"
+  "msg/StateTwistStamped.msg"
+  "msg/StateAccel.msg"
+  "msg/StateAccelStamped.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 
@@ -60,6 +64,13 @@ if(BUILD_TESTING)
     test/test_kinematic_variable.cpp
   )
   target_link_libraries(test_kinematic_variable
+    ${PROJECT_NAME}_factory
+  )
+
+  ament_add_gtest(test_kinematic_state
+    test/test_kinematic_state.cpp
+  )
+  target_link_libraries(test_kinematic_state
     ${PROJECT_NAME}_factory
   )
 endif()

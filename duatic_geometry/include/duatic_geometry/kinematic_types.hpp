@@ -46,19 +46,19 @@ static_assert(is_kinematic_diff_of_v<Snap3Dd, Jerk3Dd>);
 
 // Raw State templates and types
 template <typename ScalarT>
-using StateToPose3D = KinematicState<ScalarT, KinematicOrder::Pose>;
+using StatePose3D = KinematicState<ScalarT, KinematicOrder::Pose>;
 template <typename ScalarT>
-using StateToTwist3D = KinematicState<ScalarT, KinematicOrder::Twist>;
+using StateTwist3D = KinematicState<ScalarT, KinematicOrder::Twist>;
 template <typename ScalarT>
-using StateToAccel3D = KinematicState<ScalarT, KinematicOrder::Accel>;
+using StateAccel3D = KinematicState<ScalarT, KinematicOrder::Accel>;
 template <typename ScalarT>
 using StateToJerk3D = KinematicState<ScalarT, KinematicOrder::Jerk>;
 template <typename ScalarT>
 using StateToSnap3D = KinematicState<ScalarT, KinematicOrder::Snap>;
 
-using StateToPose3Dd = StateToPose3D<double>;
-using StateToTwist3Dd = StateToTwist3D<double>;
-using StateToAccel3Dd = StateToAccel3D<double>;
+using StatePose3Dd = StatePose3D<double>;
+using StateTwist3Dd = StateTwist3D<double>;
+using StateAccel3Dd = StateAccel3D<double>;
 using StateToJerk3Dd = StateToJerk3D<double>;
 using StateToSnap3Dd = StateToSnap3D<double>;
 
