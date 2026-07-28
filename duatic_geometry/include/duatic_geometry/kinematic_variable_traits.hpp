@@ -18,32 +18,12 @@ template <KinematicVariable T, KinematicVariable U>
 constexpr bool is_same_kinematic_order_v = is_same_kinematic_order<T, U>::value;
 
 template <KinematicVariable DIFF, KinematicVariable OF>
-struct is_kinematic_diff_of : kinematic_diff_of<DIFF, OF>
+struct is_kinematic_diff_of : std::bool_constant<kinematic_diff_of_helper<DIFF, OF>()>
 {
 };
 
 template <KinematicVariable DIFF, KinematicVariable OF>
 constexpr bool is_kinematic_diff_of_v = is_kinematic_diff_of<DIFF, OF>::value;
-
-template <typename T>
-constexpr bool is_kinematic_variable_helper()
-{
-  if constexpr (!KinematicVariable<T>) {
-    return false;
-  } else if constexpr (T::kinematic_order > KinematicOrder::Pose) {
-    return KinematicDiffVariable<T>;
-  } else {
-    return true;
-  }
-}
-
-template <typename T>
-struct is_kinematic_variable : std::bool_constant<is_kinematic_variable_helper<T>()>
-{
-};
-
-template <typename T>
-constexpr bool is_kinematic_variable_v = is_kinematic_variable<T>::value;
 
 // type traits
 

@@ -3,9 +3,6 @@
 #include <concepts>
 #include <utility>
 
-#include <duatic_geometry/kinematic_order.hpp>
-#include <duatic_geometry/timed.hpp>
-
 namespace duatic::trajectory
 {
 
@@ -25,5 +22,15 @@ concept KinematicTrajectory =
 
       { const_variable.evaluate(timestamp) } -> std::same_as<typename T::KinematicEvalState>;
     };
+
+// trait helpers
+
+template <typename T>
+struct is_kinematic_trajectory : std::bool_constant<KinematicTrajectory<T>>
+{
+};
+
+template <typename T>
+constexpr bool is_kinematic_trajectory_v = is_kinematic_trajectory<T>::value;
 
 }  // namespace duatic::trajectory

@@ -192,7 +192,7 @@ inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
                       const KinematicVariable3DEigen<ScalarT, Order>& rhs)
 {
   using return_type = KinematicVariable3DEigen<ScalarT, Order + 1>;
-  static_assert(kinematic_diff_of<return_type, KinematicVariable3DEigen<ScalarT, Order>>::value);
+  static_assert(kinematic_diff_of_helper<return_type, KinematicVariable3DEigen<ScalarT, Order>>());
 
   if constexpr (Order == KinematicOrder::Pose) {  // special case for pose
     const Eigen::AngleAxis<ScalarT> orientation_axis(lhs.angular() * rhs.angular().conjugate());

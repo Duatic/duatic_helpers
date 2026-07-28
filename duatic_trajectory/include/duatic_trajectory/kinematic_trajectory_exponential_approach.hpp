@@ -44,7 +44,7 @@ public:
   using TwistType = KinematicVariableType<geometry::KinematicOrder::Twist>;
   using TwistStateType = KinematicStateType<geometry::KinematicOrder::Twist>;
 
-  using KinematicUpdateState = geometry::Timed<TwistStateType, TimestampType>;
+  using KinematicUpdateState = geometry::TimedData<TwistStateType, TimestampType>;
   using KinematicEvalState = KinematicStateType<Self::eval_order_depth>;
 
   using TrajectoryUpdateType = PoseType;

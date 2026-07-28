@@ -5,22 +5,22 @@ namespace duatic::geometry
 {
 
 template <typename DataT, typename TimestampT>
-class Timed : public DataT
+class TimedData : public DataT
 {
 public:
   using DataType = DataT;
   using TimestampType = TimestampT;
-  using Self = Timed<DataType, TimestampType>;
+  using Self = TimedData<DataType, TimestampType>;
 
-  inline constexpr Timed() = default;
-  inline explicit constexpr Timed(const Self& other) = default;
-  inline explicit constexpr Timed(Self&& other) = default;
+  inline constexpr TimedData() = default;
+  inline explicit constexpr TimedData(const Self& other) = default;
+  inline explicit constexpr TimedData(Self&& other) = default;
 
   inline Self& operator=(const Self& other) = default;
   inline Self& operator=(Self&& other) = default;
 
   template <typename TimeCtor, typename... DataCtors>
-  inline constexpr Timed(const TimeCtor& time_init, const DataCtors&... data_init)
+  inline constexpr TimedData(const TimeCtor& time_init, const DataCtors&... data_init)
     : DataType(data_init...), time_(time_init)
   {
   }
@@ -48,10 +48,14 @@ public:
     time_ = TimestampType();
     return *this;
   }
-  Self& setNeutral()
+  Self& setDataNeutral()
   {
     DataType::setNeutral();
-    return setTimeNeutral();
+    return *this;
+  }
+  Self& setNeutral()
+  {
+    return setTimeNeutral().setDataNeutral();
   }
 
 private:
@@ -62,7 +66,7 @@ private:
 
 // streaming
 template <typename DataT, typename TimestampT>
-inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::Timed<DataT, TimestampT>& stamped)
+inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::TimedData<DataT, TimestampT>& stamped)
 {
   os << "Timed data:" << std::endl
      << " - Time: " << stamped.time() << std::endl

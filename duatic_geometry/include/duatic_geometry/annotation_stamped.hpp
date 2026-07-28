@@ -2,29 +2,30 @@
 
 #include <ostream>
 #include <string>
-#include <duatic_geometry/timed.hpp>
+#include <duatic_geometry/annotation_timed.hpp>
 
 namespace duatic::geometry
 {
 
 template <typename DataT, typename TimestampT>
-class Stamped : public Timed<DataT, TimestampT>
+class StampedData : public TimedData<DataT, TimestampT>
 {
 public:
   using DataType = DataT;
   using TimestampType = TimestampT;
-  using Self = Stamped<DataType, TimestampType>;
+  using Self = StampedData<DataType, TimestampType>;
 
-  inline constexpr Stamped() = default;
-  inline explicit constexpr Stamped(const Self& other) = default;
-  inline explicit constexpr Stamped(Self&& other) = default;
+  inline constexpr StampedData() = default;
+  inline explicit constexpr StampedData(const Self& other) = default;
+  inline explicit constexpr StampedData(Self&& other) = default;
 
   inline Self& operator=(const Self& other) = default;
   inline Self& operator=(Self&& other) = default;
 
   template <typename TimeCtor, typename... DataCtors>
-  inline constexpr Stamped(const TimeCtor& time_init, const std::string& frame_init, const DataCtors&... data_init)
-    : Timed<DataType, TimestampType>(time_init, data_init...), frame_(frame_init)
+  inline constexpr StampedData(const TimeCtor& time_init, const std::string& frame_init,
+                               const DataCtors&... data_init)
+    : TimedData<DataType, TimestampType>(time_init, data_init...), frame_(frame_init)
   {
   }
 
@@ -44,7 +45,7 @@ public:
   }
   Self& setNeutral()
   {
-    Timed<DataType, TimestampType>::setNeutral();
+    TimedData<DataType, TimestampType>::setNeutral();
     return setFrameNeutral();
   }
 
@@ -56,10 +57,10 @@ private:
 
 // streaming
 template <typename DataT, typename TimeStampT>
-inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::Stamped<DataT, TimeStampT>& stamped)
+inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::StampedData<DataT, TimeStampT>& stamped)
 {
   os << "Stamped:" << std::endl
-     << " - Time: " << stamped.timestamp() << std::endl
+     << " - Time: " << stamped.time() << std::endl
      << " - Frame: " << stamped.frame_id() << std::endl
      << " - Data: " << static_cast<const DataT&>(stamped);
   return os;

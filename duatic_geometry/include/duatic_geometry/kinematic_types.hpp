@@ -1,8 +1,9 @@
 #pragma once
 
+#include <duatic_geometry/annotation.hpp>
+#include <duatic_geometry/annotation_stamped.hpp>
+#include <duatic_geometry/annotation_timed.hpp>
 #include <duatic_geometry/kinematic_state.hpp>
-#include <duatic_geometry/timed.hpp>
-#include <duatic_geometry/stamped.hpp>
 
 #include <rclcpp/time.hpp>
 
@@ -63,7 +64,7 @@ using StateToSnap3Dd = StateToSnap3D<double>;
 
 // Timed templates and types
 template <typename ScalarT, KinematicOrder Order, typename TimestampT = rclcpp::Time>
-using TimedKinematicVariable3DT = Timed<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
+using TimedKinematicVariable3DT = TimedData<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
 
 template <typename ScalarT, typename TimestampT = rclcpp::Time>
 using TimedPose3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Pose, TimestampT>;
@@ -82,9 +83,16 @@ using TimedAccel3Dd = TimedAccel3D<double>;
 using TimedJerk3Dd = TimedJerk3D<double>;
 using TimedSnap3Dd = TimedSnap3D<double>;
 
+// Assert concept compliance
+static_assert(Timed<TimedPose3Dd>);
+static_assert(Timed<TimedTwist3Dd>);
+static_assert(Timed<TimedAccel3Dd>);
+static_assert(Timed<TimedJerk3Dd>);
+static_assert(Timed<TimedSnap3Dd>);
+
 // Stamped templates and types
 template <typename ScalarT, KinematicOrder Order, typename TimestampT = rclcpp::Time>
-using StampedKinematicVariable3DT = Stamped<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
+using StampedKinematicVariable3DT = StampedData<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
 
 template <typename ScalarT, typename TimestampT = rclcpp::Time>
 using StampedPose3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Pose, TimestampT>;
@@ -102,5 +110,12 @@ using StampedTwist3Dd = StampedTwist3D<double>;
 using StampedAccel3Dd = StampedAccel3D<double>;
 using StampedJerk3Dd = StampedJerk3D<double>;
 using StampedSnap3Dd = StampedSnap3D<double>;
+
+// Assert concept compliance
+static_assert(Stamped<StampedPose3Dd>);
+static_assert(Stamped<StampedTwist3Dd>);
+static_assert(Stamped<StampedAccel3Dd>);
+static_assert(Stamped<StampedJerk3Dd>);
+static_assert(Stamped<StampedSnap3Dd>);
 
 }  // namespace duatic::geometry

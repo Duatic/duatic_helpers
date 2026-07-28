@@ -11,15 +11,25 @@
 namespace duatic::geometry
 {
 
+class KinematicStateBase
+{
+};
+
+template <KinematicOrder OrderDepth>
+class KinematicStateOrderBase : public KinematicStateBase
+{
+public:
+  static constexpr KinematicOrder kinematic_order_depth = OrderDepth;
+};
+
 template <typename ScalarT, KinematicOrder OrderDepth,
           template <typename, KinematicOrder> typename KinematicVariable3DTT = KinematicVariable3DT>
-class KinematicState
+class KinematicState : public KinematicStateOrderBase<OrderDepth>
 {
 public:
   using ScalarType = ScalarT;
+  using KinematicStateOrderBase<OrderDepth>::kinematic_order_depth;
   using Self = KinematicState<ScalarType, OrderDepth, KinematicVariable3DTT>;
-
-  static constexpr KinematicOrder KinematicOrderDepth = OrderDepth;
 
   template <KinematicOrder Order>
   using KinematicVariable3DType = KinematicVariable3DTT<ScalarType, Order>;
@@ -50,56 +60,56 @@ public:
   }
 
   inline auto& pose()
-    requires(KinematicOrderDepth >= KinematicOrder::Pose)
+    requires(kinematic_order_depth >= KinematicOrder::Pose)
   {
     return variable<KinematicOrder::Pose>();
   }
   inline const auto& pose() const
-    requires(KinematicOrderDepth >= KinematicOrder::Pose)
+    requires(kinematic_order_depth >= KinematicOrder::Pose)
   {
     return variable<KinematicOrder::Pose>();
   }
 
   inline auto& twist()
-    requires(KinematicOrderDepth >= KinematicOrder::Twist)
+    requires(kinematic_order_depth >= KinematicOrder::Twist)
   {
     return variable<KinematicOrder::Twist>();
   }
   inline const auto& twist() const
-    requires(KinematicOrderDepth >= KinematicOrder::Twist)
+    requires(kinematic_order_depth >= KinematicOrder::Twist)
   {
     return variable<KinematicOrder::Twist>();
   }
 
   inline auto& accel()
-    requires(KinematicOrderDepth >= KinematicOrder::Accel)
+    requires(kinematic_order_depth >= KinematicOrder::Accel)
   {
     return variable<KinematicOrder::Accel>();
   }
   inline const auto& accel() const
-    requires(KinematicOrderDepth >= KinematicOrder::Accel)
+    requires(kinematic_order_depth >= KinematicOrder::Accel)
   {
     return variable<KinematicOrder::Accel>();
   }
 
   inline auto& jerk()
-    requires(KinematicOrderDepth >= KinematicOrder::Jerk)
+    requires(kinematic_order_depth >= KinematicOrder::Jerk)
   {
     return variable<KinematicOrder::Jerk>();
   }
   inline const auto& jerk() const
-    requires(KinematicOrderDepth >= KinematicOrder::Jerk)
+    requires(kinematic_order_depth >= KinematicOrder::Jerk)
   {
     return variable<KinematicOrder::Jerk>();
   }
 
   inline auto& snap()
-    requires(KinematicOrderDepth >= KinematicOrder::Snap)
+    requires(kinematic_order_depth >= KinematicOrder::Snap)
   {
     return variable<KinematicOrder::Snap>();
   }
   inline const auto& snap() const
-    requires(KinematicOrderDepth >= KinematicOrder::Snap)
+    requires(kinematic_order_depth >= KinematicOrder::Snap)
   {
     return variable<KinematicOrder::Snap>();
   }
@@ -159,5 +169,32 @@ inline std::ostream& operator<<(std::ostream& os,
   streamKinematicStateVariables(os, state, std::make_integer_sequence<KinematicOrderT, to_number(OrderDepth) + 1>{});
   return os;
 }
+
+// trait helpers
+
+template <typename T>
+struct is_kinematic_state : std::bool_constant<std::is_base_of_v<KinematicStateBase, T>>
+{
+};
+
+template <typename T>
+constexpr bool is_kinematic_state_v = is_kinematic_state<T>::value;
+
+template <typename T, KinematicOrder Order>
+struct is_kinematic_state_of_order : std::bool_constant<std::is_base_of_v<KinematicStateOrderBase<Order>, T>>
+{
+};
+
+template <typename T, KinematicOrder Order>
+constexpr bool is_kinematic_state_of_order_v = is_kinematic_state_of_order<T, Order>::value;
+
+template <typename T, KinematicOrder Order>
+  requires is_kinematic_state_v<T>
+struct is_kinematic_state_of_minimum_order : std::bool_constant<T::kinematic_order >= Order>
+{
+};
+
+template <typename T, KinematicOrder Order>
+constexpr bool is_kinematic_state_of_minimum_order_v = is_kinematic_state_of_minimum_order<T, Order>::value;
 
 }  // namespace duatic::geometry
