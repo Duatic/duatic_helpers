@@ -62,6 +62,11 @@ public:
     B_ = in_state.twist() + (A_ * omega_);
   }
 
+  inline void update_neutral(const KinematicUpdateState& in_state)
+  {
+    update(in_state, in_state.data().pose());
+  }
+
   inline void evaluate(const TimestampType& time, KinematicEvalState& out_state) const
   {
     const ScalarType t = (time - start_time_).seconds();

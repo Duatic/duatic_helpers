@@ -18,6 +18,8 @@ concept KinematicTrajectory =
 
       { variable.update(in_state, std::declval<const typename T::TrajectoryUpdateType&>()) };
 
+      { variable.update_neutral(in_state) };
+
       { const_variable.evaluate(timestamp, out_state) };
 
       { const_variable.evaluate(timestamp) } -> std::same_as<typename T::KinematicEvalState>;
