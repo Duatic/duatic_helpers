@@ -99,8 +99,24 @@ class DuaticRobotsHelper:
                 self.node.get_logger().info("Identified robot structure: Generic")
 
     def _joint_sate_callback(self, msg):
-        """Callback to update joint states and detect robots."""
-        self._joint_states = dict(zip(msg.name, msg.position))
+        """Callback to update joint states and detect robots.
+
+        Merged, not assigned: /joint_states has several publishers and not all of
+        them carry the whole robot. Measured before the provider was fixed, 600 of
+        1487 messages were empty and each one wiped this cache.
+
+        Mismatched lengths are rejected rather than truncated, because `zip` would
+        silently drop the tail and leave those joints on stale values.
+        """
+        if not msg.name:
+            return
+        if len(msg.position) != len(msg.name):
+            self.node.get_logger().warn(
+                f"Ignoring joint state with {len(msg.name)} names but "
+                f"{len(msg.position)} positions — the arrays must match or be empty",
+                throttle_duration_sec=10.0)
+            return
+        self._joint_states.update(zip(msg.name, msg.position))
 
         if self._robot_count <= 0:
             self._robot = self.get_robots_with_components()
