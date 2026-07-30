@@ -58,18 +58,38 @@ public:
     return setTimeNeutral().setDataNeutral();
   }
 
+  // Not every TimestampType is itself streamable (e.g. rclcpp::Time has no operator<<); fall back to
+  // printing its .seconds() (available on rclcpp::Time/rclcpp::Duration-like types) instead of failing
+  // to compile entirely. Shared by TimedData's and StampedData's operator<<.
+  static std::ostream& stream_time(std::ostream& os, const TimestampType& time)
+  {
+    if constexpr (requires { os << time; }) {
+      os << time;
+    } else if constexpr (requires { time.seconds(); }) {
+      os << time.seconds() << " s";
+    } else {
+      os << "<unprintable timestamp>";
+    }
+    return os;
+  }
+
+  inline std::ostream& stream_time(std::ostream& os) const
+  {
+    return Self::stream_time(os, time());
+  }
+
 private:
   TimestampType time_;
 };
 
-}  // namespace duatic::geometry
-
 // streaming
 template <typename DataT, typename TimestampT>
-inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::TimedData<DataT, TimestampT>& stamped)
+inline std::ostream& operator<<(std::ostream& os, const TimedData<DataT, TimestampT>& stamped)
 {
-  os << "Timed data:" << std::endl
-     << " - Time: " << stamped.time() << std::endl
-     << " - Data: " << static_cast<const DataT&>(stamped);
+  os << "Timed data:" << std::endl << " - Time: ";
+  stamped.stream_time(os);
+  os << std::endl << " - Data: " << static_cast<const DataT&>(stamped);
   return os;
 }
+
+}  // namespace duatic::geometry

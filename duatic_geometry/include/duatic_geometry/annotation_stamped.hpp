@@ -53,15 +53,14 @@ private:
   std::string frame_;
 };
 
-}  // namespace duatic::geometry
-
 // streaming
 template <typename DataT, typename TimeStampT>
-inline std::ostream& operator<<(std::ostream& os, const duatic::geometry::StampedData<DataT, TimeStampT>& stamped)
+inline std::ostream& operator<<(std::ostream& os, const StampedData<DataT, TimeStampT>& stamped)
 {
-  os << "Stamped:" << std::endl
-     << " - Time: " << stamped.time() << std::endl
-     << " - Frame: " << stamped.frame_id() << std::endl
-     << " - Data: " << static_cast<const DataT&>(stamped);
+  os << "Stamped:" << std::endl << " - Time: ";
+  stamped.stream_time(os);
+  os << std::endl << " - Frame: " << stamped.frame_id() << std::endl << " - Data: " << static_cast<const DataT&>(stamped);
   return os;
 }
+
+}  // namespace duatic::geometry
