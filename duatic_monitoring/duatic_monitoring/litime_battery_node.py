@@ -2,10 +2,7 @@
 
 Supports LiTime, PowerQueen, and Redodo batteries that share the same BMS protocol.
 
-Only the batteries listed in the ``battery_ids`` parameter are ever connected to. A battery
-ID is its advertised BLE name, which is printed on the battery itself, e.g.
-"L-24100BNB1000123". With no IDs configured there is nothing to do, so the node says so and
-exits instead of scanning.
+Only the batteries listed in the ``battery_ids`` parameter are ever connected to.
 
 Startup is all or nothing: one scan resolves the configured names to BLE addresses, and if
 any of them is not advertising, the node reports what it did see and exits rather than
