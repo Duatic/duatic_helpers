@@ -15,9 +15,7 @@ setup(
     entry_points={
         "console_scripts": [
             "gamepad_battery_node = duatic_monitoring.gamepad_battery_node:main",
-            "litime_battery_node = duatic_monitoring.litime_battery_node:main",
-            "mock_battery_node = duatic_monitoring.mock_battery_node:main",
-            "battery_aggregator_node = duatic_monitoring.battery_aggregator_node:main",
+            "battery_monitor_node = duatic_monitoring.battery_monitor_node:main",
             "estop_error_logger_node = duatic_monitoring.estop_error_logger_node:main",
         ],
     },

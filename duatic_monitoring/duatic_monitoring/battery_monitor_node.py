@@ -1,16 +1,24 @@
-"""Publishes LiTime LiFePO4 battery state via BLE (bleak).
+"""Publishes the combined state of the rover's battery pack.
 
-Supports LiTime, PowerQueen, and Redodo batteries that share the same BMS protocol.
+Reads every configured battery over BLE (bleak) and publishes their combined state on
+``/batteries/rover_main/state``.
 
 Only the batteries listed in the ``battery_ids`` parameter are ever connected to.
 
 Startup is all or nothing: one scan resolves the configured names to BLE addresses, and if
 any of them is not advertising, the node reports what it did see and exits rather than
 running with part of the pack missing.
+
+Set ``mock_battery_count`` instead to simulate a pack of draining batteries, for working on
+consumers of the aggregate without the hardware.
+
+The packs are assumed to be wired in parallel: voltage and percentage are averaged, current
+and capacities summed.
 """
 
 import asyncio
 import concurrent.futures
+import random
 import struct
 import threading
 from typing import Optional
@@ -39,6 +47,19 @@ MIN_FRAME_LEN = 92
 SCAN_DURATION_SEC = 10.0
 CONNECT_TIMEOUT_SEC = 10.0
 RESPONSE_TIMEOUT_SEC = 3.0
+
+OUTPUT_TOPIC = "/batteries/rover_main/state"
+OUTPUT_FRAME_ID = "rover_main"
+
+# Shape of a simulated battery. Not parameters: they exist only to give consumers of the
+# aggregate plausible numbers to react to.
+MOCK_NAME_PREFIX = "lt_batt"
+MOCK_DRAIN_PERCENT_PER_MIN = 0.1
+MOCK_VOLTAGE_FULL = 58.4
+MOCK_VOLTAGE_EMPTY = 44.0
+MOCK_CURRENT = -2.5
+MOCK_TEMPERATURE = 25.0
+MOCK_CAPACITY_AH = 100.0
 
 
 def parse_response(data: bytes) -> Optional[dict]:
@@ -108,68 +129,197 @@ def parse_response(data: bytes) -> Optional[dict]:
     }
 
 
-def sanitize_topic_name(ble_name: str) -> str:
-    """Convert a BLE device name to a valid ROS topic segment."""
-    return ble_name.replace(" ", "_").replace(":", "_").replace("-", "_").lower()
-
-
-def resolve_addresses(battery_ids, advertised: dict) -> dict:
-    """Pick the configured batteries out of a scan result, keyed by battery ID.
-
-    Matching is on the exact advertised name: an ID that differs only in case, or that is a
-    prefix of some other device's name, is a different battery and must not be connected to.
-    """
-    return {
-        battery_id: advertised[battery_id] for battery_id in battery_ids if battery_id in advertised
-    }
-
-
 class _BatteryDevice:
-    """One configured battery: where to reach it and how its last poll went."""
+    """One battery in the pack: how to reach it, how its last poll went, what it last read."""
 
-    def __init__(self, battery_id: str, publisher):
+    def __init__(self, battery_id: str):
         self.battery_id = battery_id
-        self.publisher = publisher
         # Filled in by the startup scan; still None means it was not advertising then.
         self.address: Optional[str] = None
         # None until the first poll, so that the first failure is logged like any other.
         self.last_poll_ok: Optional[bool] = None
+        # Kept across cycles: a battery that fails one poll keeps contributing its previous
+        # reading, so one BLE hiccup does not make the aggregate dip.
+        self.last_state: Optional[BatteryState] = None
+        # Mock mode only: simulated state of charge, drained on every tick.
+        self.percentage = 0.0
 
 
-class LiTimeBatteryNode(Node):
+class BatteryMonitorNode(Node):
     def __init__(self):
-        super().__init__("litime_battery")
+        super().__init__("battery_monitor")
 
+        # An empty default cannot infer its type, hence the one empty string, filtered out below.
         self.declare_parameter("battery_ids", [""])
-        none_configured = rclpy.Parameter("battery_ids", rclpy.Parameter.Type.STRING_ARRAY, [])
-        configured = self.get_parameter_or("battery_ids", none_configured).value
+        self.declare_parameter("poll_interval_sec", 30.0)
+        self.declare_parameter("mock_battery_count", 0)
+
+        configured = self.get_parameter("battery_ids").value
         # dict keys drop duplicates while keeping the configured order.
-        self.battery_ids = list(dict.fromkeys(bid for bid in configured if bid))
+        battery_ids = list(dict.fromkeys(bid for bid in configured if bid))
 
-        # Set before the early return below, so `ready` can always be read.
+        self._interval = self.get_parameter("poll_interval_sec").value
+        mock_count = self.get_parameter("mock_battery_count").value
+        self._mock = mock_count > 0
+
+        # Set before any early return below, so `ready` and `shutdown` can always be used.
         self._devices: dict[str, _BatteryDevice] = {}
+        self._loop = None
 
-        # Exit if no batteries are defined
-        if not self.battery_ids:
-            self.get_logger().error(
-                "No batteries configured, Set the 'battery_ids' "
-                "parameter to the BLE names printed on the batteries, e.g. "
-                "['L-24100BNB1000123']."
-            )
-            return
-
-        # Use latched QoS
+        # Use latched QoS, so a consumer that starts late still gets the last known state.
         qos = QoSProfile(
             depth=1,
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
         )
+        self._pub = self.create_publisher(BatteryState, OUTPUT_TOPIC, qos)
 
-        # Set up one publisher per battery
-        for battery_id in self.battery_ids:
-            topic_name = sanitize_topic_name(battery_id)
-            publisher = self.create_publisher(BatteryState, f"/batteries/{topic_name}/state", qos)
-            self._devices[battery_id] = _BatteryDevice(battery_id, publisher)
+        if self._mock:
+            self._start_mock(mock_count, battery_ids)
+        else:
+            self._start_real(battery_ids)
+
+    @property
+    def ready(self) -> bool:
+        """Whether there is a pack to read and, on real hardware, every battery was found.
+
+        All or nothing: a configured battery that is missing is reported at startup rather
+        than publishing an aggregate that silently omits part of the pack.
+        """
+        if not self._devices:
+            return False
+        return self._mock or all(d.address is not None for d in self._devices.values())
+
+    def shutdown(self):
+        """Stop the BLE thread. Safe to call even if startup failed part-way through."""
+        if self._loop is None:
+            return
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._ble_thread.join(timeout=5.0)
+        if not self._ble_thread.is_alive():
+            self._loop.close()
+
+    # --- Aggregate -----------------------------------------------------------------------
+
+    def _publish_aggregate(self):
+        """Publish the combined state of every battery that has produced a reading.
+
+        A battery that has never been read is left out entirely; until at least one has been
+        read there is nothing to publish.
+        """
+        states = [d.last_state for d in self._devices.values() if d.last_state is not None]
+        if not states:
+            return
+
+        n = len(states)
+        msg = BatteryState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = OUTPUT_FRAME_ID
+
+        # Parallel batteries: average voltage, sum current/capacity/charge.
+        msg.voltage = sum(s.voltage for s in states) / n
+        msg.current = sum(s.current for s in states)
+        msg.percentage = sum(s.percentage for s in states) / n
+        msg.capacity = sum(s.capacity for s in states)
+        msg.charge = sum(s.charge for s in states)
+        msg.design_capacity = sum(s.design_capacity for s in states)
+        msg.present = all(s.present for s in states)
+
+        # Temperature: take the max (worst case), ignoring the NaN of an unpopulated sensor.
+        temps = [s.temperature for s in states if s.temperature == s.temperature]
+        msg.temperature = max(temps) if temps else float("nan")
+
+        # Status: if any is charging → charging, else if any discharging → discharging.
+        statuses = [s.power_supply_status for s in states]
+        if BatteryState.POWER_SUPPLY_STATUS_CHARGING in statuses:
+            msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_CHARGING
+        elif BatteryState.POWER_SUPPLY_STATUS_DISCHARGING in statuses:
+            msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_DISCHARGING
+        else:
+            msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_NOT_CHARGING
+
+        msg.power_supply_technology = BatteryState.POWER_SUPPLY_TECHNOLOGY_LIFE
+
+        for s in states:
+            msg.cell_voltage.extend(s.cell_voltage)
+            msg.cell_temperature.extend(s.cell_temperature)
+
+        self._pub.publish(msg)
+
+    # --- Mock batteries ------------------------------------------------------------------
+
+    def _start_mock(self, count: int, battery_ids: list):
+        """Set up simulated batteries instead of touching BLE at all."""
+        if battery_ids:
+            self.get_logger().warn(
+                f"mock_battery_count is {count}, so the {len(battery_ids)} configured "
+                "battery_ids are ignored and no battery is connected to."
+            )
+
+        for i in range(count):
+            device = _BatteryDevice(f"{MOCK_NAME_PREFIX}_{i + 1:02d}")
+            device.percentage = round(random.uniform(1.0, 100.0), 1)
+            self._devices[device.battery_id] = device
+
+        shown = ", ".join(f"{d.battery_id} ({d.percentage:.0f}%)" for d in self._devices.values())
+        self.get_logger().info(f"Mock batteries started: {shown}")
+
+        self._timer = self.create_timer(self._interval, self._mock_tick)
+        self._mock_tick()
+
+    def _mock_tick(self):
+        """Drain every simulated battery by one interval's worth and publish the aggregate."""
+        drain = MOCK_DRAIN_PERCENT_PER_MIN * (self._interval / 60.0)
+        for device in self._devices.values():
+            device.percentage = max(0.0, device.percentage - drain)
+            device.last_state = self._mock_state(device)
+        self._publish_aggregate()
+
+    def _mock_state(self, device: _BatteryDevice) -> BatteryState:
+        """Build the state a simulated battery would report at its current charge."""
+        frac = device.percentage / 100.0
+
+        msg = BatteryState()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = device.battery_id
+        msg.voltage = MOCK_VOLTAGE_EMPTY + frac * (MOCK_VOLTAGE_FULL - MOCK_VOLTAGE_EMPTY)
+        msg.current = MOCK_CURRENT if device.percentage > 0 else 0.0
+        msg.percentage = frac
+        msg.charge = frac * MOCK_CAPACITY_AH
+        msg.capacity = MOCK_CAPACITY_AH
+        msg.design_capacity = MOCK_CAPACITY_AH
+        msg.present = True
+        msg.temperature = MOCK_TEMPERATURE
+
+        if device.percentage > 0:
+            msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_DISCHARGING
+        else:
+            msg.power_supply_status = BatteryState.POWER_SUPPLY_STATUS_NOT_CHARGING
+
+        msg.power_supply_technology = BatteryState.POWER_SUPPLY_TECHNOLOGY_LIFE
+        return msg
+
+    # --- Real batteries over BLE ---------------------------------------------------------
+
+    def _start_real(self, battery_ids: list):
+        """Resolve every configured battery's BLE address and start polling them."""
+        if not battery_ids:
+            self.get_logger().error(
+                "No batteries configured. Set the 'battery_ids' parameter to the BLE names "
+                "printed on the batteries, e.g. ['L-24100BNB1000123'], or set "
+                "'mock_battery_count' to run without hardware. Exiting."
+            )
+            return
+
+        if not BLEAK_AVAILABLE:
+            self.get_logger().error(
+                "bleak is not installed, so no battery can be read. Install python3-bleak, "
+                "or set 'mock_battery_count' to run without hardware. Exiting."
+            )
+            return
+
+        for battery_id in battery_ids:
+            self._devices[battery_id] = _BatteryDevice(battery_id)
 
         # Dedicated asyncio event loop in a background thread for bleak
         self._loop = asyncio.new_event_loop()
@@ -177,44 +327,27 @@ class LiTimeBatteryNode(Node):
         self._ble_thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._ble_thread.start()
 
-        # Look up each configured battery's BLE MAC address
         self._run_ble(self._resolve_addresses(), SCAN_DURATION_SEC + 5.0, "BLE scan")
 
         # _resolve_addresses has already reported which ones are missing.
         if not self.ready:
             return
 
-        self._poll_timer = self.create_timer(30.0, self._poll_wrapper)
+        self._timer = self.create_timer(self._interval, self._poll_wrapper)
         self.get_logger().info(
-            f"LiTime battery node started. Configured batteries: {', '.join(self._devices)}"
+            f"Battery monitor started. Configured batteries: {', '.join(self._devices)}"
         )
         self._poll_wrapper()
 
-    @property
-    def ready(self) -> bool:
-        """Whether there are batteries to poll and every one of them was found.
-
-        All or nothing: a configured battery that is missing is reported at startup rather
-        than leaving a topic that never publishes.
-        """
-        return bool(self._devices) and all(
-            device.address is not None for device in self._devices.values()
-        )
-
-    def shutdown(self):
-        """Stop the BLE thread. Safe to call even if startup failed part-way through."""
-        loop = getattr(self, "_loop", None)
-        if loop is None:
-            return
-        loop.call_soon_threadsafe(loop.stop)
-        self._ble_thread.join(timeout=5.0)
-        if not self._ble_thread.is_alive():
-            loop.close()
-
     def _poll_wrapper(self):
-        """Poll every configured battery on the BLE thread."""
+        """Poll every battery on the BLE thread, then publish one aggregate for the cycle.
+
+        Publishing happens here rather than in the coroutine so that it stays on the ROS
+        timer thread.
+        """
         per_device = CONNECT_TIMEOUT_SEC + RESPONSE_TIMEOUT_SEC
         self._run_ble(self._poll_all(), len(self._devices) * per_device + 5.0, "Poll cycle")
+        self._publish_aggregate()
 
     def _run_ble(self, coro, timeout: float, what: str):
         """Await a BLE coroutine from a ROS timer callback."""
@@ -230,18 +363,19 @@ class LiTimeBatteryNode(Node):
     async def _resolve_addresses(self):
         """Look up each configured battery's BLE address.
 
-        Addresses are fixed in hardware, so polling connects by address from here on and never needs to scan again.
+        Addresses are fixed in hardware, so polling connects by address from here on and never
+        needs to scan again.
         """
         async with self._ble_lock:
             devices = await BleakScanner.discover(timeout=SCAN_DURATION_SEC)
 
         advertised = {dev.name: dev.address for dev in devices if dev.name}
-        for battery_id, address in resolve_addresses(self._devices, advertised).items():
-            device = self._devices[battery_id]
-            device.address = address
-            self.get_logger().info(
-                f"Found battery {battery_id} at {address} → {device.publisher.topic_name}"
-            )
+        for device in self._devices.values():
+            # Exact advertised name only: an ID that differs in case, or that is a prefix of
+            # some other device's name, is a different battery and must not be connected to.
+            device.address = advertised.get(device.battery_id)
+            if device.address is not None:
+                self.get_logger().info(f"Found battery {device.battery_id} at {device.address}")
 
         missing = [d.battery_id for d in self._devices.values() if d.address is None]
         if missing:
@@ -253,7 +387,7 @@ class LiTimeBatteryNode(Node):
             )
 
     async def _poll_all(self):
-        """Poll each configured battery in turn, one BLE connection at a time."""
+        """Poll each battery in turn, one BLE connection at a time."""
         if self._ble_lock.locked():
             self.get_logger().warn("A BLE cycle is still running, skipping this poll")
             return
@@ -264,7 +398,7 @@ class LiTimeBatteryNode(Node):
                     await self._poll_device(device)
 
     async def _poll_device(self, device: _BatteryDevice):
-        """Query one battery over BLE and publish its state."""
+        """Query one battery over BLE and record its state for the next aggregate."""
         response = bytearray()
         complete = asyncio.Event()
 
@@ -300,7 +434,7 @@ class LiTimeBatteryNode(Node):
             self.get_logger().info(f"Reading battery {device.battery_id} at {device.address}")
         device.last_poll_ok = True
 
-        device.publisher.publish(self._build_msg(device, parsed))
+        device.last_state = self._build_msg(device, parsed)
 
     def _report_failure(self, device: _BatteryDevice, message: str):
         """Log a failed poll once per outage, including the very first attempt."""
@@ -312,7 +446,7 @@ class LiTimeBatteryNode(Node):
         """Turn a parsed BMS frame into a BatteryState message."""
         msg = BatteryState()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = sanitize_topic_name(device.battery_id)
+        msg.header.frame_id = device.battery_id
         msg.voltage = parsed["voltage"]
         # The BMS reports discharge as positive current; BatteryState wants it negative.
         msg.current = -parsed["current"]
@@ -340,7 +474,7 @@ class LiTimeBatteryNode(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    node = LiTimeBatteryNode()
+    node = BatteryMonitorNode()
     try:
         if node.ready:
             rclpy.spin(node)
