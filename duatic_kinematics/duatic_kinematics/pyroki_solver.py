@@ -22,6 +22,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import io
+import xml.etree.ElementTree as ET
+
 import numpy as np
 import pyroki as pk
 import yourdfpy
@@ -60,24 +62,83 @@ def _load_urdf(urdf_input):
         )
 
 
+def _freeze_joints(urdf_input, patterns):
+    """Return the URDF with every joint whose name matches a pattern made fixed.
+
+    A joint the solver must never move does not belong in the optimization problem
+    at all. Masking it out of the pose cost is not enough: it stays a variable, the
+    limit constraint still applies to it, and the optimizer spends its effort on a
+    result that is thrown away afterwards. On the DXTR that was not merely wasteful
+    — the wheels turn freely, pyroki reports a continuous joint with assumed limits
+    of +/- pi, and after driving they sit tens of radians outside that, which
+    dominates the cost and stops the solve early.
+
+    Freezing has to happen in the XML, before the model is built: setting `type` on
+    an already-loaded yourdfpy joint does not change the actuated set. Only leaf
+    joints should be named here — a frozen joint keeps whatever value the URDF
+    gives it, so freezing one that carries the target link would move the target.
+    Verified on the DXTR: 24 actuated joints down to 16 (hip plus both arms), with
+    the clamps' forward kinematics identical to 0.0000 mm.
+
+    Which joints those are is the caller's business, hence patterns rather than
+    anything robot-specific in here.
+    """
+    if isinstance(urdf_input, yourdfpy.URDF):
+        xml = urdf_input.write_xml_string()
+    elif isinstance(urdf_input, io.StringIO):
+        xml = urdf_input.getvalue()
+    elif isinstance(urdf_input, str) and not urdf_input.startswith("<"):
+        with open(urdf_input, encoding="utf-8") as f:
+            xml = f.read()
+    else:
+        xml = urdf_input
+
+    root = ET.fromstring(xml)
+    frozen = []
+    for joint in root.findall("joint"):
+        name = joint.get("name", "")
+        if joint.get("type") == "fixed" or not any(p in name for p in patterns):
+            continue
+        joint.set("type", "fixed")
+        # A fixed joint has no axis or limits; leaving them behind only invites a
+        # parser to disagree with us about what this joint is.
+        for tag in ("axis", "limit", "dynamics", "mimic", "safety_controller"):
+            for child in joint.findall(tag):
+                joint.remove(child)
+        frozen.append(name)
+    return ET.tostring(root, encoding="unicode"), frozen
+
+
 def _limit_margin_residual(
     vals: jaxls.VarValues,
     robot: pk.Robot,
     joint_var: jaxls.Var[jax.Array],
+    joint_mask: jax.Array,
     margin: float = 0.15,
     weight: float = 5.0,
 ) -> jax.Array:
     """Penalizes joints approaching their limits within a margin zone.
 
-    Unlike limit_constraint which only prevents exceeding limits,
-    this creates a soft cost that pushes joints away from limits,
-    preventing singularities (e.g. fully extended elbow).
+    Unlike limit_constraint, which only prevents exceeding a limit, this is a soft
+    cost that pushes joints away from their limits, keeping the solution clear of
+    singular configurations such as a fully extended elbow.
+
+    Only the joints being optimized are charged for it, which is what joint_mask
+    is for. Charging the others is not a harmless extra term, it breaks the solve:
+    a continuous joint such as a wheel is reported by pyroki with assumed limits of
+    +/- pi, and after a few metres of driving the wheels sit tens of radians past
+    that. Measured, one wheel stood 26.5 rad outside its assumed range, which at
+    weight 5 is a residual of 132 — a constant, since the wheels are masked out and
+    cannot move, but one that dwarfs the pose residual the solve is actually about.
+    The optimizer then stops on its relative-improvement criterion while the tool
+    is still 3 cm and 0.06 rad away, and does so identically in every situation,
+    which is exactly the constant miss that looked like an unreachable pose.
     """
     joint_cfg = vals[joint_var]
-    joint_cfg_eff = robot.joints.get_full_config(joint_cfg)
-    upper_proximity = jnp.maximum(0.0, joint_cfg_eff - (robot.joints.upper_limits_all - margin))
-    lower_proximity = jnp.maximum(0.0, (robot.joints.lower_limits_all + margin) - joint_cfg_eff)
-    return (jnp.concatenate([upper_proximity, lower_proximity]) * weight).flatten()
+    upper_proximity = jnp.maximum(0.0, joint_cfg - (robot.joints.upper_limits - margin))
+    lower_proximity = jnp.maximum(0.0, (robot.joints.lower_limits + margin) - joint_cfg)
+    masked = jnp.concatenate([upper_proximity * joint_mask, lower_proximity * joint_mask])
+    return (masked * weight).flatten()
 
 
 _limit_margin_cost = jaxls.Cost.factory(_limit_margin_residual)
@@ -108,27 +169,7 @@ def _soft_range_residual(
     return ((over + under) * weights).flatten()
 
 
-def _joint_continuity_residual(
-    vals: jaxls.VarValues,
-    joint_var: jaxls.Var[jax.Array],
-    indices: jax.Array,
-    prev_cfg: jax.Array,
-    weights: jax.Array,
-) -> jax.Array:
-    """Cost for moving selected joints away from their previous value.
-
-    Intended for joints that can reach the same pose through a different
-    branch — typically the rotational ones. Without this the solver may hand
-    back a solution that flips such a joint by half a turn between two
-    neighbouring points of a path. Stronger than the global rest_cost because it
-    applies to those joints only.
-    """
-    cfg = vals[joint_var]
-    return ((cfg[indices] - prev_cfg[indices]) * weights).flatten()
-
-
 _soft_range_cost = jaxls.Cost.factory(_soft_range_residual)
-_joint_continuity_cost = jaxls.Cost.factory(_joint_continuity_residual)
 
 
 @jdc.jit
@@ -141,13 +182,10 @@ def _solve_ik(
     joint_mask: jax.Array,
     prev_cfg: jax.Array,
     initial_cfg: jax.Array,
-    cont_reference: jax.Array,
     soft_indices: jax.Array,
     soft_lower: jax.Array,
     soft_upper: jax.Array,
     soft_weights: jax.Array,
-    cont_indices: jax.Array,
-    cont_weights: jax.Array,
     self_collision_weight: float = 10.0,
     self_collision_margin: float = 0.01,
     limit_margin: float = 0.15,
@@ -159,17 +197,16 @@ def _solve_ik(
     initial_cfg is used as the optimization starting point (may differ from prev_cfg
     to break singularities).
 
-    soft_* describe preferred joint ranges (see _soft_range_residual) and cont_*
-    the joints held near their previous value (see _joint_continuity_residual).
-    Both are passed as index arrays rather than names so this stays jittable;
-    empty arrays disable them.
+    soft_* describe preferred joint ranges (see _soft_range_residual), passed as
+    index arrays rather than names so this stays jittable; empty arrays disable
+    them.
 
-    cont_reference is what the continuity cost measures against, and is
-    deliberately NOT prev_cfg: prev_cfg is the rest pose, a fixed reference the
-    whole path shares, whereas continuity has to compare against the previous
-    point's own solution. Using the rest pose for both would just be a second,
-    differently weighted rest cost and would not stop a branch flip between two
-    neighbouring points.
+    There is deliberately no continuity COST here. Penalizing a joint's departure
+    from its previous value with a plain (a - b) residual blows up near an angle
+    wrap, where a physically tiny reorientation is a ~2*pi jump in raw joint
+    space, and that destabilizes convergence. Keeping a solution on the same
+    branch is handled where it belongs: by solving from several seeds and picking
+    among the acceptable results (see solve()).
     """
     joint_var = robot.joint_var_cls(0)
 
@@ -182,7 +219,14 @@ def _solve_ik(
             target_pose,
             target_link_index,
             pos_weight=50.0,
-            ori_weight=10.0,
+            # 100, not 10. The acceptance thresholds ask for 0.015 m of position
+            # and 0.01 rad of orientation — 0.6 degrees — and a weight of 10
+            # against a position weight of 50 does not buy that: measured, the
+            # solve settled at 4 mm of position but 0.05 rad of orientation, so
+            # it was trading away exactly the quantity that was checked most
+            # tightly. This is also the value the colleagues' planner service
+            # runs with, alongside the same thresholds.
+            ori_weight=100.0,
             joint_mask=joint_mask,
         ),
         pk.costs.rest_cost(
@@ -204,6 +248,7 @@ def _solve_ik(
         _limit_margin_cost(
             robot,
             joint_var,
+            joint_mask,
             margin=limit_margin,
             weight=limit_margin_weight,
         ),
@@ -214,12 +259,6 @@ def _solve_ik(
             soft_upper,
             soft_weights,
         ),
-        _joint_continuity_cost(
-            joint_var,
-            cont_indices,
-            cont_reference,
-            cont_weights,
-        ),
     ]
 
     sol = (
@@ -229,7 +268,12 @@ def _solve_ik(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
-            termination=jaxls.TerminationConfig(max_iterations=30),
+            # 60, not 30. The direct continuation from a sane posture was coming
+            # back 2.5 cm short of a target it can clearly reach, which is what a
+            # solve that ran out of iterations looks like — and being rejected for
+            # it is expensive, because the fallback is a different arm shape
+            # entirely. Doubling the budget costs single-digit milliseconds.
+            termination=jaxls.TerminationConfig(max_iterations=60),
             initial_vals=jaxls.VarValues.make([joint_var.with_value(initial_cfg)]),
         )
     )
@@ -352,6 +396,7 @@ class PyrokiIKSolver:
         singularity_nudge_joints=None,
         soft_ranges=None,
         continuity_joints=None,
+        exclude_joints=None,
     ):
         """
         Args:
@@ -368,11 +413,22 @@ class PyrokiIKSolver:
                 make a pose unreachable. Which joints and which values is the
                 caller's business — a pattern matching none of this robot's joints
                 contributes nothing, so no per-robot special case is needed here.
-            continuity_joints: optional dict of joint name pattern -> weight, holding
-                those joints near the configuration passed as the solve's seed. Use
-                it for joints that could otherwise reach the same pose through a
-                flipped branch.
+            exclude_joints: optional list of joint name patterns the solver must
+                never move — wheels, a head, gripper fingers. They are frozen in
+                the URDF before the model is built, so they are not variables at
+                all (see _freeze_joints for why masking them is not enough). Name
+                only leaf joints.
+            continuity_joints: optional dict of joint name pattern -> weight, giving
+                those joints extra say when solve() ranks the results of several
+                seeds by closeness (see config_distance). Use it for joints that
+                could otherwise reach the same pose through a flipped branch —
+                typically the rotational ones. These weights never enter the
+                solver: as a cost, a plain difference on a wrapping joint
+                destabilizes convergence, which is why the selection does the job.
         """
+        self.frozen_joints: list = []
+        if exclude_joints:
+            urdf_input, self.frozen_joints = _freeze_joints(urdf_input, exclude_joints)
         if isinstance(urdf_input, yourdfpy.URDF):
             urdf_obj = urdf_input
         else:
@@ -408,14 +464,56 @@ class PyrokiIKSolver:
         self._soft_upper = jnp.array(hi, dtype=jnp.float32)
         self._soft_weights = jnp.array(w, dtype=jnp.float32)
 
-        cidx, cw = [], []
+        # Extra weight when RANKING equally valid solutions (see solve()), not a
+        # cost. These are the joints that can reach the same tool pose through a
+        # visibly different arm configuration.
+        self._rank_weights = np.ones(len(self.joint_names), dtype=np.float64)
         for pattern, weight in (continuity_joints or {}).items():
             for i, name in enumerate(self.joint_names):
-                if pattern in name and i not in cidx:
-                    cidx.append(i)
-                    cw.append(float(weight))
-        self._cont_idx = jnp.array(cidx, dtype=jnp.int32)
-        self._cont_weights = jnp.array(cw, dtype=jnp.float32)
+                if pattern in name:
+                    self._rank_weights[i] = float(weight)
+
+        # A joint whose range spans a full turn wraps, so distances along it must
+        # be measured the short way round: without that, a physically tiny
+        # reorientation across the wrap point measures as ~2*pi and would make a
+        # perfectly continuous solution look like the worst possible one.
+        self._wraps = np.zeros(len(self.joint_names), dtype=bool)
+        for i, name in enumerate(self.joint_names):
+            j = urdf_obj.joint_map.get(name)
+            lim = getattr(j, "limit", None) if j is not None else None
+            lo = getattr(lim, "lower", None) if lim is not None else None
+            hi = getattr(lim, "upper", None) if lim is not None else None
+            if lo is None or hi is None:
+                # A continuous joint (a wheel, a rotation without end stops)
+                # carries no bounds at all.
+                self._wraps[i] = True
+            elif (hi - lo) >= 2.0 * np.pi - 1e-6:
+                self._wraps[i] = True
+
+    def config_distance(self, q, q_ref):
+        """Weighted joint-space distance, used only to rank solutions that already
+        meet the pose thresholds — never fed into the solver.
+
+        Prefers a result that keeps the ranked joints near where they were over an
+        equally valid but reconfigured one. Wrapping joints are compared the short
+        way round.
+        """
+        d = np.asarray(q, dtype=np.float64) - np.asarray(q_ref, dtype=np.float64)
+        d = np.where(self._wraps, np.arctan2(np.sin(d), np.cos(d)), d)
+        return float(np.sum(self._rank_weights * d * d))
+
+    def joint_step(self, q, q_ref, mask=None):
+        """Largest single-joint travel from q_ref to q, the short way round.
+
+        Only the joints the solve was allowed to move are counted: a joint pinned
+        to its previous value cannot contribute travel, and one frozen out of the
+        model has none to contribute either.
+        """
+        d = np.asarray(q, dtype=np.float64) - np.asarray(q_ref, dtype=np.float64)
+        d = np.where(self._wraps, np.arctan2(np.sin(d), np.cos(d)), d)
+        if mask is not None:
+            d = d * (np.asarray(mask, dtype=np.float64) > 0.5)
+        return float(np.max(np.abs(d))) if d.size else 0.0
 
     def _nudge_near_zero(self, cfg: jnp.ndarray, thresh: float = 0.08) -> jnp.ndarray:
         """If cfg is near-zero (singular), nudge configured joints to help the optimizer.
@@ -455,7 +553,9 @@ class PyrokiIKSolver:
         return np.array(positions, dtype=np.float32), np.array(wxyzs, dtype=np.float32)
 
     def solve(self, target_link_name, target_pos, target_wxyz, prev_cfg,
-              joint_mask=None, rest_cfg=None, soft_scale=1.0):
+              joint_mask=None, rest_cfg=None, soft_scale=1.0,
+              seeds=None, prefer_near=None,
+              pos_err_thresh=None, ori_err_thresh=None, max_joint_step=None):
         """
         Solve IK for a single target link.
 
@@ -482,6 +582,37 @@ class PyrokiIKSolver:
                 actively harmful once the arm sits in a bad spot: a config that
                 is snagged on the environment then attracts the solve and the
                 result is off by 10 cm or more.
+            seeds: optional list of (n_actuated,) starting configurations to solve
+                from, tried in addition to prev_cfg. A redundant arm reaches the
+                same tool pose in several ways, and which one a gradient solve
+                converges to is decided entirely by where it starts. One seed
+                therefore gives no control at all over the arm's shape: if the
+                current configuration sits in the wrong basin, the solve returns
+                a valid pose with the elbow folded into the body. Several seeds
+                turn that into a choice.
+            prefer_near: (n_actuated,) reference for picking among the seeds'
+                results. Every result that meets the thresholds is scored by
+                config_distance against this, and the closest wins — so the arm
+                keeps its shape instead of reconfiguring. Defaults to prev_cfg,
+                i.e. to where the arm actually is: that is what continuity means.
+                Ranking against the rest pose instead makes a solve that has to
+                fall back to another seed reconfigure the whole arm.
+            max_joint_step: how far any single joint may travel from prev_cfg for a
+                result to count as usable, in radians. Without it, accuracy is the
+                only criterion and it picks postures no one would choose: measured,
+                the direct continuation missed a grasp by 2.5 cm and was rejected,
+                so a solution 1.3 mm from the target won instead — 3.09 rad away,
+                with the shoulder and the wrist both sitting on their limits. A near
+                miss in a sane posture beats a perfect hit in a contorted one, and
+                it beats it on the real robot too, where such a posture is where
+                joints overheat and singularities live. Measured the short way
+                round, so a wrapping joint is not condemned for crossing +/- pi.
+            pos_err_thresh / ori_err_thresh: what counts as reaching the target
+                for that selection. A result missing either is only used if no
+                seed produced an acceptable one, in which case the best attempt
+                is returned with its true errors — reporting the failure is the
+                caller's job, not something to paper over here. Default: accept
+                any result, i.e. rank purely by closeness.
 
         Returns:
             (cfg, pos_error, ori_error)
@@ -493,44 +624,96 @@ class PyrokiIKSolver:
         target_link_index = self.robot.links.names.index(target_link_name)
 
         prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
-        initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
         rest_cfg_np = (prev_cfg_np if rest_cfg is None
                        else jnp.asarray(rest_cfg, dtype=jnp.float32))
 
-        cfg = _solve_ik(
-            self.robot,
-            self.robot_coll,
-            jnp.array(target_link_index, dtype=jnp.int32),
-            jnp.array(target_wxyz, dtype=jnp.float32),
-            jnp.array(target_pos, dtype=jnp.float32),
-            jnp.array(joint_mask, dtype=jnp.float32),
-            jnp.array(rest_cfg_np, dtype=jnp.float32),
-            jnp.array(initial_cfg_np, dtype=jnp.float32),
-            jnp.array(prev_cfg_np, dtype=jnp.float32),
-            self._soft_idx,
-            self._soft_lower,
-            self._soft_upper,
-            self._soft_weights * float(soft_scale),
-            self._cont_idx,
-            self._cont_weights,
-            self_collision_weight=self.self_collision_weight,
-            self_collision_margin=self.self_collision_margin,
+        # prev_cfg first: continuing straight from where the arm is, is the best
+        # possible outcome, so an acceptable result from that seed is taken and
+        # the remaining seeds are never solved. That also keeps a call that
+        # already works today bit-for-bit unchanged — the extra seeds only ever
+        # come into play once the direct continuation misses.
+        seed_list, seen = [], set()
+        for cand in [prev_cfg_np] + list(seeds or []):
+            arr = np.asarray(cand, dtype=np.float64)
+            key = tuple(np.round(arr, 4).tolist())
+            if key not in seen:
+                seen.add(key)
+                seed_list.append(jnp.asarray(cand, dtype=jnp.float32))
+
+        # Ranked against where the arm IS, not against the reference posture.
+        # Getting this wrong is expensive and was: with rest_cfg as the reference,
+        # a solve whose direct continuation missed fell through to the solution
+        # nearest the reference posture, and the arm was commanded to swing its
+        # shoulder 2.54 rad — 146 degrees — round to a different but equally valid
+        # arm shape. The controller aborted on its trajectory tolerance, and
+        # rightly so. Continuity is a statement about the previous configuration;
+        # the reference posture's job is to steer the SOLVE (as the rest cost), not
+        # to decide which of several valid results to keep.
+        reference = np.asarray(
+            prefer_near if prefer_near is not None else prev_cfg, dtype=np.float64
         )
 
-        # Safety net: enforce locked joints stay exactly at prev_cfg
-        cfg_np = jnp.array(cfg)
-        mask_arr = jnp.array(joint_mask)
-        cfg_np = jnp.where(mask_arr > 0.5, cfg_np, prev_cfg)
+        best = None          # (distance, cfg, pos_err, ori_err) among acceptable
+        fallback = None      # (pos_err + ori_err, cfg, pos_err, ori_err) otherwise
+        self.last_solve_info = {"seeds": len(seed_list), "chosen": None, "attempts": []}
 
-        pos_err, ori_err = _compute_pose_error(
-            self.robot,
-            jnp.array(cfg_np, dtype=jnp.float32),
-            jnp.array(target_link_index, dtype=jnp.int32),
-            jnp.array(target_wxyz, dtype=jnp.float32),
-            jnp.array(target_pos, dtype=jnp.float32),
-        )
+        for seed_i, seed in enumerate(seed_list):
+            initial_cfg_np = self._nudge_near_zero(seed)
 
-        return np.array(cfg_np), float(pos_err), float(ori_err)
+            cfg = _solve_ik(
+                self.robot,
+                self.robot_coll,
+                jnp.array(target_link_index, dtype=jnp.int32),
+                jnp.array(target_wxyz, dtype=jnp.float32),
+                jnp.array(target_pos, dtype=jnp.float32),
+                jnp.array(joint_mask, dtype=jnp.float32),
+                jnp.array(rest_cfg_np, dtype=jnp.float32),
+                jnp.array(initial_cfg_np, dtype=jnp.float32),
+                self._soft_idx,
+                self._soft_lower,
+                self._soft_upper,
+                self._soft_weights * float(soft_scale),
+                self_collision_weight=self.self_collision_weight,
+                self_collision_margin=self.self_collision_margin,
+            )
+
+            # Safety net: enforce locked joints stay exactly at prev_cfg
+            cfg_np = jnp.where(jnp.array(joint_mask) > 0.5, jnp.array(cfg), prev_cfg)
+
+            pos_err, ori_err = _compute_pose_error(
+                self.robot,
+                jnp.array(cfg_np, dtype=jnp.float32),
+                jnp.array(target_link_index, dtype=jnp.int32),
+                jnp.array(target_wxyz, dtype=jnp.float32),
+                jnp.array(target_pos, dtype=jnp.float32),
+            )
+            cfg_out = np.array(cfg_np)
+            pos_err, ori_err = float(pos_err), float(ori_err)
+
+            step = self.joint_step(cfg_out, np.asarray(prev_cfg, dtype=np.float64),
+                                   mask=np.asarray(joint_mask, dtype=np.float64))
+            ok = ((pos_err_thresh is None or pos_err <= pos_err_thresh)
+                  and (ori_err_thresh is None or ori_err <= ori_err_thresh)
+                  and (max_joint_step is None or step <= max_joint_step))
+            self.last_solve_info["attempts"].append(
+                (seed_i, round(pos_err, 4), round(ori_err, 4), round(step, 3), ok)
+            )
+
+            if ok and seed_i == 0:
+                self.last_solve_info["chosen"] = 0
+                return cfg_out, pos_err, ori_err
+            if ok:
+                d = self.config_distance(cfg_out, reference)
+                if best is None or d < best[0]:
+                    best = (d, cfg_out, pos_err, ori_err, seed_i)
+            else:
+                score = pos_err + ori_err
+                if fallback is None or score < fallback[0]:
+                    fallback = (score, cfg_out, pos_err, ori_err, seed_i)
+
+        chosen = best if best is not None else fallback
+        self.last_solve_info["chosen"] = chosen[4]
+        return chosen[1], chosen[2], chosen[3]
 
     def solve_multi(
         self, target_link_names, target_positions, target_wxyzs, prev_cfg, joint_mask=None
