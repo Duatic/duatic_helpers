@@ -653,8 +653,12 @@ class PyrokiIKSolver:
             prefer_near if prefer_near is not None else prev_cfg, dtype=np.float64
         )
 
-        best = None          # (distance, cfg, pos_err, ori_err) among acceptable
-        fallback = None      # (pos_err + ori_err, cfg, pos_err, ori_err) otherwise
+        best = None          # (distance, cfg, pos_err, ori_err, seed) among acceptable
+        # Ranking the fallback by accuracy alone is wrong: measured, a seed 3 mm off
+        # that swung the arm 2.598 rad (149 degrees, around the torso) beat one
+        # 2.8 cm off that barely moved it, and ended 78 cm out once executed.
+        near_fallback = None  # over the pose threshold, but within max_joint_step
+        any_fallback = None   # over everything; last resort
         self.last_solve_info = {"seeds": len(seed_list), "chosen": None, "attempts": []}
 
         for seed_i, seed in enumerate(seed_list):
@@ -708,11 +712,17 @@ class PyrokiIKSolver:
                     best = (d, cfg_out, pos_err, ori_err, seed_i)
             else:
                 score = pos_err + ori_err
-                if fallback is None or score < fallback[0]:
-                    fallback = (score, cfg_out, pos_err, ori_err, seed_i)
+                entry = (score, cfg_out, pos_err, ori_err, seed_i)
+                if any_fallback is None or score < any_fallback[0]:
+                    any_fallback = entry
+                if max_joint_step is None or step <= max_joint_step:
+                    if near_fallback is None or score < near_fallback[0]:
+                        near_fallback = entry
 
-        chosen = best if best is not None else fallback
+        chosen = best or near_fallback or any_fallback
         self.last_solve_info["chosen"] = chosen[4]
+        self.last_solve_info["from"] = ("acceptable" if best else
+                                        "near_fallback" if near_fallback else "any_fallback")
         return chosen[1], chosen[2], chosen[3]
 
     def solve_multi(
