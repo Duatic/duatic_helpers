@@ -114,7 +114,8 @@ class DuaticRobotsHelper:
             self.node.get_logger().warn(
                 f"Ignoring joint state with {len(msg.name)} names but "
                 f"{len(msg.position)} positions — the arrays must match or be empty",
-                throttle_duration_sec=10.0)
+                throttle_duration_sec=10.0,
+            )
             return
         self._joint_states.update(zip(msg.name, msg.position))
 
