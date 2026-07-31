@@ -112,10 +112,9 @@ static void on_joint_state_request(const GetJointStates::Request::SharedPtr& req
 // Regular update at which the full current state is republished
 static void on_update()
 {
-  // With no producer feeding this node the map stays empty, and publishing then put
-  // an empty JointState on the topic at the full rate — measured, 600 of 1487
-  // messages in six seconds. Consumers that assign rather than merge get wiped by
-  // each one. Staying silent is also the clearer signal than a stream of nothing.
+  // An empty JointState carries no information, and a consumer that replaces its cache
+  // with the message contents is wiped by every one of them. A silent provider is also
+  // the clearer signal: a stream of nothing looks like a working publisher.
   if (joint_states_.empty()) {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 10000,
                          "No joint states received from any producer yet — publishing "

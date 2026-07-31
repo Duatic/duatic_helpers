@@ -101,11 +101,11 @@ class DuaticRobotsHelper:
     def _joint_sate_callback(self, msg):
         """Callback to update joint states and detect robots.
 
-        Merged, not assigned: /joint_states has several publishers and not all of
-        them carry the whole robot. Measured before the provider was fixed, 600 of
-        1487 messages were empty and each one wiped this cache.
+        Merged, not assigned: /joint_states may have several publishers and they need
+        not each carry the whole robot, so replacing the cache lets one partial message
+        hide everyone else's joints. Empty messages are dropped for the same reason.
 
-        Mismatched lengths are rejected rather than truncated, because `zip` would
+        Mismatched array lengths are rejected rather than truncated, because `zip` would
         silently drop the tail and leave those joints on stale values.
         """
         if not msg.name:

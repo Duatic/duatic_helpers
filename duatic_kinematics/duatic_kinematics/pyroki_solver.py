@@ -66,10 +66,10 @@ def _freeze_joints(urdf_input, patterns):
     """Return the URDF with every joint whose name matches a pattern made fixed.
 
     Masking a joint out of the pose cost is not enough — it stays a variable and the
-    limit constraint still applies. On the DXTR the wheels sit tens of radians outside
-    their assumed +/- pi after driving, which dominated the cost and stopped the solve
-    early. Must happen in the XML: setting `type` on a loaded yourdfpy joint does not
-    change the actuated set. Name leaf joints only, or the target link moves with them.
+    limit constraint still applies to it, which is how a freely turning wheel comes to
+    dominate an arm's solve. Must happen in the XML: setting `type` on a loaded yourdfpy
+    joint does not change the actuated set. Name leaf joints only, or the target link
+    moves with them.
     """
     if isinstance(urdf_input, yourdfpy.URDF):
         xml = urdf_input.write_xml_string()
@@ -108,10 +108,11 @@ def _limit_margin_residual(
     """Soft cost pushing joints away from their limits, keeping the solve clear of
     singular configurations such as a fully extended elbow.
 
-    Only masked-in joints are charged. Charging the others breaks the solve: measured,
-    one wheel stood 26.5 rad outside its assumed range, a constant residual of 132 that
-    dwarfed the pose term and stopped the optimizer 3 cm short — identically every time,
-    which looked like an unreachable pose.
+    Only masked-in joints are charged. Charging the others breaks the solve: a continuous
+    joint is reported with assumed limits of +/- pi and can sit far outside them, so it
+    contributes a large constant residual that dwarfs the pose term and stops the
+    optimizer early — the same distance short every time, which reads as an unreachable
+    pose rather than a cost problem.
     """
     joint_cfg = vals[joint_var]
     upper_proximity = jnp.maximum(0.0, joint_cfg - (robot.joints.upper_limits - margin))
@@ -524,12 +525,11 @@ class PyrokiIKSolver:
             prefer_near: reference for picking among the seeds' acceptable results,
                 scored by config_distance. Defaults to prev_cfg, i.e. where the arm
                 actually is — that is what continuity means. Ranking against the rest
-                pose instead made a fallback reconfigure the whole arm by 2.54 rad.
+                pose instead makes a fallback reconfigure the whole arm.
             max_joint_step: how far any single joint may travel from prev_cfg, in
-                radians, for a result to count. Without it accuracy is the only
-                criterion: measured, a solution 1.3 mm from the target won over a 2.5 cm
-                miss while sitting 3.09 rad away with shoulder and wrist on their limits.
-                Measured the short way round, so a wrapping joint is not condemned.
+                radians, for a result to count. Without it accuracy is the only criterion
+                and it buys millimetres with whole-arm reconfigurations, ending on joint
+                limits. Measured the short way round, so a wrapping joint is not condemned.
             pos_err_thresh / ori_err_thresh: what counts as reaching the target. A result
                 missing either is used only if no seed produced an acceptable one, and is
                 then returned with its true errors — reporting is the caller's job.
@@ -553,17 +553,17 @@ class PyrokiIKSolver:
                 seen.add(key)
                 seed_list.append(jnp.asarray(cand, dtype=jnp.float32))
 
-        # Ranked against where the arm IS, not the reference posture: with rest_cfg as
-        # reference a fallback swung the shoulder 2.54 rad to an equally valid shape and
-        # the controller aborted. The reference steers the SOLVE, not the selection.
+        # Ranked against where the arm IS, not the reference posture: otherwise a
+        # fallback swings to an equally valid but different shape and the controller
+        # aborts on its tolerance. The reference steers the SOLVE, not the selection.
         reference = np.asarray(
             prefer_near if prefer_near is not None else prev_cfg, dtype=np.float64
         )
 
         best = None  # (distance, cfg, pos_err, ori_err, seed) among acceptable
-        # Ranking the fallback by accuracy alone is wrong: measured, a seed 3 mm off
-        # that swung the arm 2.598 rad (149 degrees, around the torso) beat one
-        # 2.8 cm off that barely moved it, and ended 78 cm out once executed.
+        # Ranking the fallback by accuracy alone is wrong: it prefers a large
+        # reconfiguration that is millimetres closer over a near miss that barely moves,
+        # and a reconfigured arm executes far worse than its solved error suggests.
         near_fallback = None  # over the pose threshold, but within max_joint_step
         any_fallback = None  # over everything; last resort
         self.last_solve_info = {"seeds": len(seed_list), "chosen": None, "attempts": []}
