@@ -51,7 +51,7 @@ class DuaticRobotsHelper:
         )
 
         self._joint_states_subscription = self.node.create_subscription(
-            JointState, "joint_states", self._joint_sate_callback, 10
+            JointState, "joint_states", self._joint_state_callback, 10
         )
 
         self.hardware_components_client = self.node.create_client(
@@ -98,26 +98,36 @@ class DuaticRobotsHelper:
                 self.robot_structure = "generic"
                 self.node.get_logger().info("Identified robot structure: Generic")
 
-    def _joint_sate_callback(self, msg):
-        """Callback to update joint states and detect robots.
+    def _joint_state_callback(self, msg):
+        """Merge a joint state update into the cache and detect robots on the first one.
 
-        Merged, not assigned: /joint_states may have several publishers and they need
-        not each carry the whole robot, so replacing the cache lets one partial message
-        hide everyone else's joints. Empty messages are dropped for the same reason.
-
-        Mismatched array lengths are rejected rather than truncated, because `zip` would
-        silently drop the tail and leave those joints on stale values.
+        Accepts partial updates; ignores messages it cannot interpret. Note that entries
+        are never removed, so a publisher that goes away leaves its last values behind —
+        expiring them would need a per-joint timestamp, which nothing here needs yet.
         """
-        if not msg.name:
+        # A JointState may legally carry names without positions, for a publisher that
+        # sends only velocity or effort. Nothing to merge, and nothing wrong either.
+        if not msg.name or not msg.position:
             return
+        # zip would silently drop the tail and leave those joints on stale values.
         if len(msg.position) != len(msg.name):
-            self.node.get_logger().warn(
+            self.node.get_logger().warning(
                 f"Ignoring joint state with {len(msg.name)} names but "
-                f"{len(msg.position)} positions — the arrays must match or be empty",
+                f"{len(msg.position)} positions",
                 throttle_duration_sec=10.0,
             )
             return
-        self._joint_states.update(zip(msg.name, msg.position))
+        # Merged, not assigned: /joint_states may have several publishers and they need
+        # not each carry the whole robot, so replacing the cache lets one partial message
+        # hide everyone else's joints.
+        #
+        # Copy and rebind rather than update in place. get_joint_states() hands out this
+        # very dict and callers iterate it from other callbacks — with a
+        # MultiThreadedExecutor that is a mutation under an iterator. A rebind gives every
+        # reader a consistent snapshot; the copy costs nothing at a few dozen joints.
+        merged = dict(self._joint_states)
+        merged.update(zip(msg.name, msg.position))
+        self._joint_states = merged
 
         if self._robot_count <= 0:
             self._robot = self.get_robots_with_components()
