@@ -186,8 +186,9 @@ def _solve_ik(
             target_pose,
             target_link_index,
             pos_weight=50.0,
-            # 100, not 10: at 10 the solve settled at 4 mm position but 0.05 rad
-            # orientation, trading away the quantity checked most tightly (0.01 rad).
+            # Orientation is the tightly checked quantity here — callers accept about
+            # 0.01 rad — so it has to outweigh position, or the solve buys millimetres
+            # of position by giving orientation away.
             ori_weight=100.0,
             joint_mask=joint_mask,
         ),
@@ -230,8 +231,9 @@ def _solve_ik(
             verbose=False,
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
-            # 60, not 30: at 30 a reachable target came back 2.5 cm short, and being
-            # rejected for it costs a whole different arm shape. Doubling costs ms.
+            # Generous on purpose: a solve that runs out of iterations comes back
+            # centimetres short of a reachable target, and being rejected for that costs
+            # a fall back to an entirely different arm shape. Iterations cost ms.
             termination=jaxls.TerminationConfig(max_iterations=60),
             initial_vals=jaxls.VarValues.make([joint_var.with_value(initial_cfg)]),
         )
