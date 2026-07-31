@@ -9,6 +9,7 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>python3-bleak</exec_depend>
   <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>duatic_controller_msgs</exec_depend>
   <exec_depend>rosidl_runtime_py</exec_depend>

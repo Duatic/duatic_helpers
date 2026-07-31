@@ -1,6 +1,3 @@
-import os
-from glob import glob
-
 from setuptools import find_packages, setup
 
 package_name = "duatic_monitoring"
@@ -12,16 +9,13 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
     ],
     install_requires=["setuptools"],
     extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "gamepad_battery_node = duatic_monitoring.gamepad_battery_node:main",
-            "litime_battery_node = duatic_monitoring.litime_battery_node:main",
-            "mock_battery_node = duatic_monitoring.mock_battery_node:main",
-            "battery_aggregator_node = duatic_monitoring.battery_aggregator_node:main",
+            "battery_monitor_node = duatic_monitoring.battery_monitor_node:main",
             "estop_error_logger_node = duatic_monitoring.estop_error_logger_node:main",
         ],
     },
