@@ -19,22 +19,23 @@ namespace duatic::trajectory
 {
 
 /*
- * A KinematicLimits provider suitable for KinematicTrajectoryExponentialApproach: in addition to
+ * A KinematicTrajectorySettings provider suitable for KinematicTrajectoryExponentialApproach: in addition to
  * the linear/angular velocity limits, this trajectory needs a convergence-rate (omega) range.
  */
 template <typename T>
-concept KinematicLimitsExponentialApproach = KinematicLimits<T> && requires(const T& const_variable) {
-  { const_variable.omega_min() } -> std::same_as<typename T::ScalarType>;
-  { const_variable.omega_max() } -> std::same_as<typename T::ScalarType>;
-};
+concept KinematicTrajectorySettingsExponentialApproach =
+    KinematicTrajectorySettings<T> && requires(const T& const_variable) {
+      { const_variable.omega_min() } -> std::same_as<typename T::ScalarType>;
+      { const_variable.omega_max() } -> std::same_as<typename T::ScalarType>;
+    };
 
 /*
- * Plain-data default implementation of KinematicLimitsExponentialApproach: public members, no
- * validation. Reuses KinematicLimitsDefault for the linear/angular velocity limits and adds the
+ * Plain-data default implementation of KinematicTrajectorySettingsExponentialApproach: public members, no
+ * validation. Reuses KinematicTrajectorySettingsDefault for the linear/angular velocity limits and adds the
  * omega range on top.
  */
-template <typename ScalarT, KinematicLimits BaseT = KinematicLimitsDefault<ScalarT>>
-struct KinematicLimitsExponentialApproachDefault : public BaseT
+template <typename ScalarT, KinematicTrajectorySettings BaseT = KinematicTrajectorySettingsDefault<ScalarT>>
+struct KinematicTrajectorySettingsExponentialApproachDefault : public BaseT
 {
   using ScalarType = typename BaseT::ScalarType;
 
@@ -44,7 +45,7 @@ struct KinematicLimitsExponentialApproachDefault : public BaseT
   /*
    * Move-assigns the BaseT part from anything BaseT itself can be move-assigned from (BaseT
    * directly, or -- via BaseT's own operator=, e.g. a custom one like
-   * CartesianPoseController::KinematicLimitsParams::operator=(Params&&) -- one of BaseT's own
+   * CartesianPoseController::KinematicTrajectorySettingsParams::operator=(Params&&) -- one of BaseT's own
    * ancestors). Constrained to rvalues only (BaseAssignableT deduces to a non-reference type only
    * when called with an rvalue) so this never competes with the implicitly-declared copy-assignment
    * operator for lvalue arguments. Excluded for Self itself, since std::assignable_from<BaseT&,
@@ -53,7 +54,7 @@ struct KinematicLimitsExponentialApproachDefault : public BaseT
    */
   template <typename BaseAssignableT>
     requires(!std::is_reference_v<BaseAssignableT>) && std::assignable_from<BaseT&, BaseAssignableT&&>
-  inline KinematicLimitsExponentialApproachDefault& operator=(BaseAssignableT&& rhs)
+  inline KinematicTrajectorySettingsExponentialApproachDefault& operator=(BaseAssignableT&& rhs)
   {
     static_cast<BaseT&>(*this) = std::forward<BaseAssignableT>(rhs);
     return *this;
@@ -86,8 +87,10 @@ struct KinematicLimitsExponentialApproachDefault : public BaseT
   }
 };
 
-static_assert(KinematicLimitsExponentialApproach<KinematicLimitsExponentialApproachDefault<double>>,  // line break
-              "KinematicLimitsExponentialApproachDefault must satisfy the KinematicLimitsExponentialApproach concept.");
+static_assert(KinematicTrajectorySettingsExponentialApproach<
+                  KinematicTrajectorySettingsExponentialApproachDefault<double>>,  // line break
+              "KinematicTrajectorySettingsExponentialApproachDefault must satisfy the "
+              "KinematicTrajectorySettingsExponentialApproach concept.");
 
 /*
  * Exponential approach towards a goal:
@@ -115,34 +118,33 @@ static_assert(KinematicLimitsExponentialApproach<KinematicLimitsExponentialAppro
  * Note that the entire non-const calculation can be done in the goal's diff-type and be added to the goal.
  * The diff-evlaluation converges toward numerically stable zero
  */
-template <typename ScalarT, geometry::KinematicOrder EvalOrderDepth, typename TimestampT,
+template <typename ScalarT, typename TimestampT,
           template <typename, geometry::KinematicOrder> typename KinematicVariableT,
-          KinematicLimitsExponentialApproach KinematicLimitsT = KinematicLimitsExponentialApproachDefault<ScalarT>>
-  requires std::convertible_to<typename KinematicLimitsT::ScalarType, ScalarT>
+          KinematicTrajectorySettingsExponentialApproach KinematicTrajectorySettingsT =
+              KinematicTrajectorySettingsExponentialApproachDefault<ScalarT>>
+  requires std::convertible_to<typename KinematicTrajectorySettingsT::ScalarType, ScalarT>
 class KinematicTrajectoryExponentialApproach
 {
 public:
   using ScalarType = ScalarT;
-  static constexpr geometry::KinematicOrder eval_order_depth = EvalOrderDepth;
   using TimestampType = TimestampT;
-  using KinematicLimitsType = KinematicLimitsT;
+  using KinematicTrajectorySettingsType = KinematicTrajectorySettingsT;
 
-  using Self = KinematicTrajectoryExponentialApproach<ScalarType, eval_order_depth, TimestampType, KinematicVariableT,
-                                                      KinematicLimitsType>;
+  using Self = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, KinematicVariableT,
+                                                      KinematicTrajectorySettingsType>;
 
   template <geometry::KinematicOrder Order>
-  using KinematicVariableType = KinematicVariableT<ScalarType, Order>;
+  using KinematicVariable = KinematicVariableT<ScalarType, Order>;
   template <geometry::KinematicOrder OrderDepth>
-  using KinematicStateType = geometry::KinematicState<ScalarType, OrderDepth, KinematicVariableT>;
+  using KinematicState = geometry::KinematicState<ScalarType, OrderDepth, KinematicVariableT>;
 
-  using PoseType = KinematicVariableType<geometry::KinematicOrder::Pose>;
-  using TwistType = KinematicVariableType<geometry::KinematicOrder::Twist>;
-  using TwistStateType = KinematicStateType<geometry::KinematicOrder::Twist>;
+  using PoseType = KinematicVariable<geometry::KinematicOrder::Pose>;
+  using TwistType = KinematicVariable<geometry::KinematicOrder::Twist>;
+  using TwistStateType = KinematicState<geometry::KinematicOrder::Twist>;
 
-  using KinematicUpdateState = geometry::TimedData<TwistStateType, TimestampType>;
-  using KinematicEvalState = KinematicStateType<Self::eval_order_depth>;
+  using UpdateStateType = geometry::TimedData<TwistStateType, TimestampType>;
 
-  using TrajectoryUpdateType = PoseType;
+  using TrajectoryDescriptionType = PoseType;
 
   /*
    * limits is the sole source of truth for the velocity and omega bounds (see determine_omega()
@@ -151,7 +153,7 @@ public:
    * because, with a freshly-constructed zero offset A_, determine_omega() would compute exactly
    * that value anyway (see the attached mathematical proof).
    */
-  inline explicit KinematicTrajectoryExponentialApproach(std::shared_ptr<KinematicLimitsType> shared_limits)
+  inline explicit KinematicTrajectoryExponentialApproach(std::shared_ptr<KinematicTrajectorySettingsType> shared_limits)
     : limits(std::move(shared_limits))
   {
     assert(limits != nullptr && "Given shared limits don't exist");
@@ -159,31 +161,59 @@ public:
   }
 
   /*
-   * Available only if KinematicLimitsType is default-constructible: creates a privately-owned
+   * Available only if KinematicTrajectorySettingsType is default-constructible: creates a privately-owned
    * limits object (not shared with any other owner) using its defaults.
    */
   inline KinematicTrajectoryExponentialApproach()
-    requires std::default_initializable<KinematicLimitsType>
-    : KinematicTrajectoryExponentialApproach(std::make_shared<KinematicLimitsType>())
+    requires std::default_initializable<KinematicTrajectorySettingsType>
+    : KinematicTrajectoryExponentialApproach(std::make_shared<KinematicTrajectorySettingsType>())
   {
   }
 
-  inline void update(const KinematicUpdateState& in_state, const PoseType& update_pose)
+  inline void calculate(const UpdateStateType& in_update_state, const TrajectoryDescriptionType& in_description)
   {
-    std::cout << "\n Replan trajectory with initial state:\n" << in_state << "\n";
-    start_time_ = in_state.time();
-    goal_ = update_pose;
-    A_ = in_state.pose() - goal_;
-    omega_ = determine_omega(in_state.twist());
-    B_ = in_state.twist() + (A_ * omega_);
+    start_time_ = in_update_state.time();
+    goal_ = in_description;
+    A_ = in_update_state.pose() - goal_;
+    omega_ = determine_omega(in_update_state.twist());
+    B_ = in_update_state.twist() + (A_ * omega_);
   }
 
-  inline void update_neutral(const KinematicUpdateState& in_state)
+  inline void calculate_neutral(const UpdateStateType& in_update_state)
   {
-    update(in_state, in_state.data().pose());
+    calculate(in_update_state, in_update_state.data().pose());
   }
 
-  inline void evaluate(const TimestampType& time, KinematicEvalState& out_state) const
+  /*
+   * Replans starting from the 'other' trajectory's predicted state at in_timestamp (rather than an
+   * externally supplied UpdateStateType), so the caller only needs to provide the new target.
+   */
+  inline void update_from(const Self& other, const TimestampType& in_timestamp,
+                          const TrajectoryDescriptionType& in_description)
+  {
+    // there are no future trajectory data existing to be copied
+    calculate(
+        UpdateStateType(in_timestamp, other.evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
+        in_description);
+  }
+
+  /*
+   * Replans starting from this trajectory's own predicted state at in_timestamp (rather than an
+   * externally supplied UpdateStateType), so the caller only needs to provide the new target.
+   */
+  inline void update(const TimestampType& in_timestamp, const TrajectoryDescriptionType& in_description)
+  {
+    update_from(*this, in_timestamp, in_description);
+  }
+
+  inline void update_neutral(const TimestampType& in_timestamp)
+  {
+    calculate_neutral(
+        UpdateStateType(in_timestamp, evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)));
+  }
+
+  template <geometry::KinematicOrder Order>
+  inline void evaluate(const TimestampType& time, KinematicState<Order>& out_state) const
   {
     const ScalarType t = (time - start_time_).seconds();
     const ScalarType decay = std::exp(-omega_ * t);
@@ -191,30 +221,31 @@ public:
 
     out_state.pose() = goal_ + (linear_factor * decay);
 
-    if constexpr (Self::eval_order_depth >= geometry::KinematicOrder::Twist) {
+    if constexpr (Order >= geometry::KinematicOrder::Twist) {
       const TwistType scaled_linear_factor = linear_factor * omega_;
       // B_ and scaled_linear_factor are the same order, so "-" would resolve to the special
       // diff operator (which returns the next higher order) instead of a same-order subtraction.
       out_state.twist() = (B_ + (-scaled_linear_factor)) * decay;
 
-      if constexpr (Self::eval_order_depth >= geometry::KinematicOrder::Accel) {
+      if constexpr (Order >= geometry::KinematicOrder::Accel) {
         out_state.accel() = (scaled_linear_factor - (B_ * 2)) * omega_ * decay;
       }
     }
 
-    static_assert(Self::eval_order_depth < geometry::KinematicOrder::Jerk,  // line break
+    static_assert(Order < geometry::KinematicOrder::Jerk,  // line break
                   "This kinematic depth has not yet been implemented, just do it.");
   }
 
-  inline KinematicEvalState evaluate(const TimestampType& time) const
+  template <geometry::KinematicOrder Order>
+  inline KinematicState<Order> evaluate(const TimestampType& time) const
   {
-    KinematicEvalState out_state;
-    evaluate(time, out_state);
+    KinematicState<Order> out_state;
+    evaluate<Order>(time, out_state);
     return out_state;
   }
 
 public:
-  std::shared_ptr<KinematicLimitsType> limits;
+  std::shared_ptr<KinematicTrajectorySettingsType> limits;
 
 private:
   /*
