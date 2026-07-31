@@ -99,21 +99,28 @@ class DuaticRobotsHelper:
                 self.node.get_logger().info("Identified robot structure: Generic")
 
     def _joint_state_callback(self, msg):
-        """Merge a joint state update into the cache and detect robots on the first one.
+        """Update the cache from a possibly partial JointState, and detect robots once.
 
-        Accepts partial updates; ignores messages it cannot interpret. Note that entries
-        are never removed, so a publisher that goes away leaves its last values behind —
-        expiring them would need a per-joint timestamp, which nothing here needs yet.
+        Contract: merges rather than replaces, ignores messages whose arrays are
+        inconsistent, and never leaves a partially updated cache visible.
+
+        The cache therefore only grows: a publisher that goes away leaves its last values
+        behind. Deliberate, and safe here because robot detection is a one-shot — the
+        callback below rebuilds it only while _robot_count is 0, and every external caller
+        reads that frozen result through get_component_names(). Stale joints cannot
+        produce stale robots. Expiring them would need a per-joint timestamp; going back
+        to replacing the cache would trade visible ghosts for joints that vanish
+        sporadically depending on publisher timing, which is far harder to debug.
         """
-        # A JointState may legally carry names without positions, for a publisher that
-        # sends only velocity or effort. Nothing to merge, and nothing wrong either.
-        if not msg.name or not msg.position:
+        if not msg.position:
+            # Legal per sensor_msgs/JointState: a publisher may send only velocity or
+            # effort. Nothing here to merge, and nothing wrong with it either.
             return
-        # zip would silently drop the tail and leave those joints on stale values.
+
         if len(msg.position) != len(msg.name):
             self.node.get_logger().warning(
-                f"Ignoring joint state with {len(msg.name)} names but "
-                f"{len(msg.position)} positions",
+                f"Ignoring JointState with {len(msg.name)} names and "
+                f"{len(msg.position)} positions: arrays must have equal length",
                 throttle_duration_sec=10.0,
             )
             return
