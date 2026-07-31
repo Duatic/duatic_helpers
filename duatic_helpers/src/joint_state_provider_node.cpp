@@ -53,23 +53,12 @@ static std::map<std::string, JointState> joint_states_;
 
 static void on_new_joint_state(const sensor_msgs::msg::JointState& msg)
 {
-  // A JointState may legally carry names without positions — a publisher sending only
-  // velocity or effort. This node records positions, so there is nothing to take from
-  // such a message, but nothing is wrong with it either and it must not be logged as an
-  // error. position was the one array here not allowed to be empty, unlike velocity and
-  // effort, although the message definition treats all three the same.
-  if (msg.position.empty()) {
-    return;
-  }
-
-  // Genuinely inconsistent: the arrays cannot be paired up with the names.
+  // Check if the message is valid - all fields must have the same size
   if (msg.position.size() != msg.name.size() ||
       (!msg.velocity.empty() && msg.velocity.size() != msg.name.size()) ||
       (!msg.effort.empty() && msg.effort.size() != msg.name.size())) {
-    // Ten seconds, not 100 ms. A broken publisher does not need announcing ten times a
-    // second, and at that rate the message drowns whatever else is in the log.
-    RCLCPP_ERROR_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 10000,
-        "Ignoring joint state message whose fields do not have the same size");
+    RCLCPP_ERROR_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 100,
+        "Received invalid joint state message - fields do not have the same size");
     return;
   }
 
