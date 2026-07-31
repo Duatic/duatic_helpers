@@ -48,8 +48,7 @@ SCAN_DURATION_SEC = 10.0
 CONNECT_TIMEOUT_SEC = 10.0
 RESPONSE_TIMEOUT_SEC = 3.0
 
-OUTPUT_TOPIC = "/batteries/rover_main/state"
-OUTPUT_FRAME_ID = "rover_main"
+OUTPUT_TOPIC = "/batteries/duarover/state"
 
 # Shape of a simulated battery. Not parameters: they exist only to give consumers of the
 # aggregate plausible numbers to react to.
@@ -214,7 +213,7 @@ class BatteryMonitorNode(Node):
         n = len(states)
         msg = BatteryState()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = OUTPUT_FRAME_ID
+        msg.header.frame_id = ""
 
         # Parallel batteries: average voltage, sum current/capacity/charge.
         msg.voltage = sum(s.voltage for s in states) / n
