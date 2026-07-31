@@ -51,7 +51,7 @@ class DuaticRobotsHelper:
         )
 
         self._joint_states_subscription = self.node.create_subscription(
-            JointState, "joint_states", self._joint_state_callback, 10
+            JointState, "joint_states", self._joint_sate_callback, 10
         )
 
         self.hardware_components_client = self.node.create_client(
@@ -98,43 +98,9 @@ class DuaticRobotsHelper:
                 self.robot_structure = "generic"
                 self.node.get_logger().info("Identified robot structure: Generic")
 
-    def _joint_state_callback(self, msg):
-        """Update the cache from a possibly partial JointState, and detect robots once.
-
-        Contract: merges rather than replaces, ignores messages whose arrays are
-        inconsistent, and never leaves a partially updated cache visible.
-
-        The cache therefore only grows: a publisher that goes away leaves its last values
-        behind. Deliberate, and safe here because robot detection is a one-shot — the
-        callback below rebuilds it only while _robot_count is 0, and every external caller
-        reads that frozen result through get_component_names(). Stale joints cannot
-        produce stale robots. Expiring them would need a per-joint timestamp; going back
-        to replacing the cache would trade visible ghosts for joints that vanish
-        sporadically depending on publisher timing, which is far harder to debug.
-        """
-        if not msg.position:
-            # Legal per sensor_msgs/JointState: a publisher may send only velocity or
-            # effort. Nothing here to merge, and nothing wrong with it either.
-            return
-
-        if len(msg.position) != len(msg.name):
-            self.node.get_logger().warning(
-                f"Ignoring JointState with {len(msg.name)} names and "
-                f"{len(msg.position)} positions: arrays must have equal length",
-                throttle_duration_sec=10.0,
-            )
-            return
-        # Merged, not assigned: /joint_states may have several publishers and they need
-        # not each carry the whole robot, so replacing the cache lets one partial message
-        # hide everyone else's joints.
-        #
-        # Copy and rebind rather than update in place. get_joint_states() hands out this
-        # very dict and callers iterate it from other callbacks — with a
-        # MultiThreadedExecutor that is a mutation under an iterator. A rebind gives every
-        # reader a consistent snapshot; the copy costs nothing at a few dozen joints.
-        merged = dict(self._joint_states)
-        merged.update(zip(msg.name, msg.position))
-        self._joint_states = merged
+    def _joint_sate_callback(self, msg):
+        """Callback to update joint states and detect robots."""
+        self._joint_states = dict(zip(msg.name, msg.position))
 
         if self._robot_count <= 0:
             self._robot = self.get_robots_with_components()
