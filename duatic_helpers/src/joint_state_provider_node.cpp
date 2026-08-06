@@ -22,7 +22,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <algorithm>
 #include <map>
+#include <optional>
+#include <set>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <duatic_helper_msgs/srv/get_joint_states.hpp>
@@ -50,6 +53,12 @@ struct JointState
 };
 
 static std::map<std::string, JointState> joint_states_;
+
+// Joints whose last update is older than this are left out of the published state. Zero disables the check.
+static double stale_timeout_{ 5.0 };
+// Which joints are currently withheld, so both edges can be logged once rather than every cycle. A joint that
+// disappears and returns is worth seeing: it is harder to debug than one that is simply gone.
+static std::set<std::string> stale_joints_;
 
 static void on_new_joint_state(const sensor_msgs::msg::JointState& msg)
 {
@@ -89,6 +98,10 @@ static void on_joint_state_request(const GetJointStates::Request::SharedPtr& req
 {
   // Produce a single joint state message from our internal state and set it in the response
   // NOTE as we use a singlethreaded executor there is no need for locking
+  //
+  // Unlike the published topic this deliberately applies no stale_timeout and keeps the current stamp: every joint
+  // is returned with its own produce and receive time below, so the caller can judge freshness per joint and apply
+  // whatever policy it needs. Filtering here would take that information away without offering a replacement.
   sensor_msgs::msg::JointState msg;
   msg.header.stamp = node_->get_clock()->now();
 
@@ -122,17 +135,62 @@ static void on_update()
     return;
   }
 
+  const auto now = node_->now();
+
   sensor_msgs::msg::JointState msg;
-  msg.header.stamp = node_->get_clock()->now();
+  // Oldest producer stamp among the joints we are about to publish. Restamping with now() instead would claim the
+  // whole message is as fresh as this cycle, which stops being true the moment one producer falls behind: its last
+  // values keep going out at the full rate under a brand new stamp, and a dead arm becomes indistinguishable from a
+  // still one.
+  std::optional<rclcpp::Time> oldest_produce_time;
+
   for (const auto& elem : joint_states_) {
+    const auto& state = elem.second;
+
+    // Measured against receive_time, not produce_time: the question here is whether the producer is still there, and
+    // receive_time is always our own clock. produce_time comes out of a foreign header and is unusable when that
+    // producer runs an unsynchronised clock or does not stamp at all.
+    if (stale_timeout_ > 0.0 && (now - state.receive_time).seconds() > stale_timeout_) {
+      if (stale_joints_.insert(elem.first).second) {
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Joint '" << elem.first << "' had no update for " << stale_timeout_
+                                                          << "s — dropping it from the published state until its "
+                                                             "producer comes back.");
+      }
+      continue;
+    }
+    if (stale_joints_.erase(elem.first) > 0) {
+      RCLCPP_INFO_STREAM(node_->get_logger(), "Joint '" << elem.first << "' is being published again.");
+    }
+
     msg.name.push_back(elem.first);
 
-    msg.position.push_back(elem.second.position);
-    if (elem.second.velocity)
-      msg.velocity.push_back(elem.second.velocity.value());
-    if (elem.second.effort)
-      msg.effort.push_back(elem.second.effort.value());
+    msg.position.push_back(state.position);
+    if (state.velocity)
+      msg.velocity.push_back(state.velocity.value());
+    if (state.effort)
+      msg.effort.push_back(state.effort.value());
+
+    // A producer that leaves its header unstamped only tells us when we received it, which is the closest honest
+    // answer available.
+    const auto produced = state.produce_time.nanoseconds() > 0 ? state.produce_time : state.receive_time;
+    if (!oldest_produce_time || produced < oldest_produce_time.value())
+      oldest_produce_time = produced;
   }
+
+  if (msg.name.empty()) {
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 10000,
+                         "Every known joint is stale — publishing nothing instead of a state that no producer stands "
+                         "behind any more.");
+    return;
+  }
+
+  // Never claim to be fresher than the oldest producer, and never older than what we are still willing to keep. The
+  // lower bound matters because a producer stamping from an unsynchronised clock would otherwise put an arbitrarily
+  // old stamp on the whole aggregate, and everything downstream of robot_state_publisher hangs off this single stamp.
+  const auto oldest_acceptable = now - rclcpp::Duration::from_seconds(stale_timeout_);
+  msg.header.stamp = stale_timeout_ > 0.0 ? std::max(oldest_produce_time.value(), oldest_acceptable) :
+                                            oldest_produce_time.value();
+
   // If for some reason the publisher was not created successfully but the update was started -> better check it
   if (joint_state_publisher_)
     joint_state_publisher_->publish(msg);
@@ -147,6 +205,7 @@ int main(int argc, char** argv)
   node_->declare_parameter<double>("publish_rate", 100.0);
   node_->declare_parameter<std::vector<std::string>>("listen_topics");
   node_->declare_parameter<std::string>("publish_topic", "/joint_states");
+  node_->declare_parameter<double>("stale_timeout", 5.0);
 
   // The rate in Hz at which the combined joint state message gets published
   const auto publish_rate = node_->get_parameter("publish_rate").as_double();
@@ -154,6 +213,10 @@ int main(int argc, char** argv)
   const auto listen_topic_names = node_->get_parameter("listen_topics").as_string_array();
   // Name of the topic we publish the joint states to (This is per default /joint_states)
   const auto publish_topic_name = node_->get_parameter("publish_topic").as_string();
+  // How long a joint may go without an update before we stop publishing it. Generous on purpose: it is a backstop
+  // against a producer that has gone away, not the freshness signal itself - that one is the header stamp, which is
+  // exact from the first millisecond. Set to 0 to keep publishing every joint we have ever seen.
+  stale_timeout_ = node_->get_parameter("stale_timeout").as_double();
 
   // Subscribe to all configured listen topics.
   for (const auto& listen_topic : listen_topic_names) {
@@ -167,6 +230,12 @@ int main(int argc, char** argv)
   // Service for reading the latest joint states state
   joint_state_service_ = node_->create_service<GetJointStates>("/joint_states/get", &on_joint_state_request);
   RCLCPP_INFO_STREAM(node_->get_logger(), "Publishing rate: " << publish_rate << "Hz");
+  if (stale_timeout_ > 0.0) {
+    RCLCPP_INFO_STREAM(node_->get_logger(), "Dropping joints not updated for: " << stale_timeout_ << "s");
+  } else {
+    RCLCPP_WARN_STREAM(node_->get_logger(), "Stale joint detection is disabled - joints will be published "
+                                            "indefinitely after their producer goes away");
+  }
 
   update_timer_ =
       node_->create_wall_timer(std::chrono::milliseconds(static_cast<int64_t>(1000.0 / publish_rate)), &on_update);
