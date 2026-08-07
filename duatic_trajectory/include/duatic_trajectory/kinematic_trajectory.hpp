@@ -18,6 +18,9 @@ concept KinematicTrajectorySettings = requires(const T& const_variable) {
 
   { const_variable.velocity_limit_linear() } -> std::same_as<typename T::ScalarType>;
   { const_variable.velocity_limit_angular() } -> std::same_as<typename T::ScalarType>;
+
+  { const_variable.acceleration_limit_linear() } -> std::same_as<typename T::ScalarType>;
+  { const_variable.acceleration_limit_angular() } -> std::same_as<typename T::ScalarType>;
 };
 
 // trait helpers
@@ -38,8 +41,11 @@ struct KinematicTrajectorySettingsDefault
 {
   using ScalarType = ScalarT;
 
-  ScalarType v_max_lin_{ 1.0 };
-  ScalarType v_max_ang_{ 2.0 * std::numbers::pi_v<ScalarType> };
+  ScalarType v_max_lin_{ 0.1 };                                   // default linear speed limit is 0.1 m/s
+  ScalarType v_max_ang_{ 2.0 * std::numbers::pi_v<ScalarType> };  // default angular speed limit is 1 rev/s
+
+  ScalarType a_max_lin_{ v_max_lin_ / 1.0 };  // default linear acceleration limit is max speed / 1s
+  ScalarType a_max_ang_{ v_max_ang_ / 1.0 };  // default angular acceleration limit is max speed / 1s
 
   inline ScalarType velocity_limit_linear() const
   {
@@ -49,6 +55,16 @@ struct KinematicTrajectorySettingsDefault
   inline ScalarType velocity_limit_angular() const
   {
     return v_max_ang_;
+  }
+
+  inline ScalarType acceleration_limit_linear() const
+  {
+    return a_max_lin_;
+  }
+
+  inline ScalarType acceleration_limit_angular() const
+  {
+    return a_max_ang_;
   }
 
   /*
@@ -63,6 +79,20 @@ struct KinematicTrajectorySettingsDefault
     }
     v_max_lin_ = v_max_lin;
     v_max_ang_ = v_max_ang;
+    return true;
+  }
+
+  /*
+   * Sets the maximum linear and angular acceleration the trajectory should approximately respect.
+   * Returns false (without changing any state) if either limit is negative.
+   */
+  inline bool set_acceleration_limits(const ScalarType a_max_lin, const ScalarType a_max_ang)
+  {
+    if ((a_max_lin < static_cast<ScalarType>(0)) || (a_max_ang < static_cast<ScalarType>(0))) {
+      return false;
+    }
+    a_max_lin_ = a_max_lin;
+    a_max_ang_ = a_max_ang;
     return true;
   }
 };

@@ -1,9 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <concepts>
-#include <limits>
 #include <memory>
 #include <numbers>
 #include <type_traits>
@@ -38,6 +38,17 @@ namespace duatic::trajectory
  *  2. Satisfy the following approximation: v(t) <= (|v| + omega * |A|) / e = v_max
  *     -> omega = ((v_max * e) - |v|) / |A|   IF |A| = 0 : use max omega (given by parameter)
  * -> See attached mathematical proof including omega-clamp introduction
+ *
+ * ALTERNATIVE: Approximate A-Limit
+ *  Because only pose and twist (not accel) are matched at t=0, x''(t) can jump discontinuously at the
+ *  start of a (re-)plan; unlike the velocity case, this jump is NOT automatically bounded by omega_min/
+ *  omega_max/v_max. There are exactly two candidate locations for the peak of |x''(t)| over t >= 0:
+ *   1. The t=0 jump itself:       x''(0)    = -(omega^2 * A + 2 * omega * v0)
+ *   2. An interior extremum at:   t*        = 3/omega - A/B
+ *                                 x''(t*)   = omega * B * e^(omega*A/B - 3) = -(omega/e) * x'(t_a0)
+ *  Which one is larger depends only on k = omega*A/B: the t=0 jump dominates for k outside
+ *  [k_threshold, 3] (k_threshold = 2 - W(1/e) ~= 1.7215, from solving (2-k)*e^(3-k) = 1); the interior
+ *  extremum can exceed it only inside that window. See determine_acc_omega() below.
  *
  * Separate linear and angular max velocities, but synchonize both mothins by using the smalles omega of both
  *
@@ -74,22 +85,23 @@ public:
   using TrajectoryDescriptionType = PoseType;
 
   /*
-   * limits is the sole source of truth for the velocity and omega bounds (see determine_omega()
+   * settings is the sole source of truth for the velocity and omega bounds (see determine_omega()
    * below); it is kept as a shared_ptr so it may be shared with (and updated by) other owners,
-   * but this trajectory only ever reads from it. omega_ is seeded from limits->omega_max()
+   * but this trajectory only ever reads from it. omega_ is seeded from settings->omega_max()
    * because, with a freshly-constructed zero offset A_, determine_omega() would compute exactly
    * that value anyway (see the attached mathematical proof).
    */
-  inline explicit KinematicTrajectoryExponentialApproach(std::shared_ptr<KinematicTrajectorySettingsType> shared_limits)
-    : limits(std::move(shared_limits))
+  inline explicit KinematicTrajectoryExponentialApproach(
+      std::shared_ptr<KinematicTrajectorySettingsType> shared_settings)
+    : settings(std::move(shared_settings))
   {
-    assert(limits != nullptr && "Given shared limits don't exist");
-    omega_ = limits->omega_min();
+    assert(settings != nullptr && "Given shared settings don't exist");
+    omega_ = settings->omega_min();
   }
 
   /*
    * Available only if KinematicTrajectorySettingsType is default-constructible: creates a privately-owned
-   * limits object (not shared with any other owner) using its defaults.
+   * settings object (not shared with any other owner) using its defaults.
    */
   inline KinematicTrajectoryExponentialApproach()
     requires std::default_initializable<KinematicTrajectorySettingsType>
@@ -171,38 +183,116 @@ public:
     return out_state;
   }
 
-public:
-  std::shared_ptr<KinematicTrajectorySettingsType> limits;
-
 private:
+  /*
+   * k threshold above which the interior acceleration extremum x''(t*) can exceed the t=0 jump
+   * x''(0) (see the "Approximate A-Limit" note above). Solves (2-k)*e^(3-k) = 1 for k < 2, i.e.
+   * k_threshold = 2 - W(1/e), via the Lambert W function.
+   */
+  static constexpr ScalarType k_threshold = static_cast<ScalarType>(1.7215354572389219);
+
   /*
    * assumed the internal variable A_ has already benn determined !
    */
   inline ScalarType determine_omega(const TwistType& v_zero) const
   {
-    assert(limits->velocity_limit_linear() >= 0.0);
-    assert(limits->velocity_limit_angular() >= 0.0);
-    return std::min(determine_omega(limits->velocity_limit_linear(), v_zero.linear().norm(), A_.linear().norm()),
-                    determine_omega(limits->velocity_limit_angular(), v_zero.angular().norm(), A_.angular().norm()));
+    assert(settings->velocity_limit_linear() >= 0.0);
+    assert(settings->velocity_limit_angular() >= 0.0);
+    assert(settings->acceleration_limit_linear() >= 0.0);
+    assert(settings->acceleration_limit_angular() >= 0.0);
+
+    const ScalarType omega_lin =
+        std::min(determine_lin_omega(settings->velocity_limit_linear(), v_zero.linear().norm(), A_.linear().norm()),
+                 determine_acc_omega(settings->acceleration_limit_linear(), settings->velocity_limit_linear(),
+                                     v_zero.linear().norm(), A_.linear().norm()));
+    const ScalarType omega_ang =
+        std::min(determine_lin_omega(settings->velocity_limit_angular(), v_zero.angular().norm(), A_.angular().norm()),
+                 determine_acc_omega(settings->acceleration_limit_angular(), settings->velocity_limit_angular(),
+                                     v_zero.angular().norm(), A_.angular().norm()));
+
+    // Both determine_lin_omega() and determine_acc_omega() already return values within
+    // [omega_min, omega_max]; clamp again here regardless, so this stays true even if either helper's
+    // assumptions are violated (e.g. a structurally infeasible acceleration limit).
+    return std::clamp(std::min(omega_lin, omega_ang), settings->omega_min(), settings->omega_max());
   }
 
-  inline ScalarType determine_omega(const ScalarType v_max, const ScalarType v_zero, const ScalarType a) const
+  inline ScalarType determine_lin_omega(const ScalarType v_max, const ScalarType v_zero, const ScalarType a) const
   {
     assert(v_max >= 0.0);
     assert(v_zero >= 0.0);
     assert(a >= 0.0);
-    assert(limits->omega_min() > 0.0);
-    assert(limits->omega_max() >= limits->omega_min());
+    assert(settings->omega_min() > 0.0);
+    assert(settings->omega_max() >= settings->omega_min());
     const ScalarType v_descision = (std::numbers::e_v<ScalarType> * v_max) - v_zero;
-    if (limits->omega_min() * a >= v_descision) {
-      return limits->omega_min();
-    } else if (limits->omega_max() * a < v_descision) {
-      return limits->omega_max();
+    if (settings->omega_min() * a >= v_descision) {
+      return settings->omega_min();
+    } else if (settings->omega_max() * a < v_descision) {
+      return settings->omega_max();
     } else {
       return v_descision / a;
     }
   }
 
+  /*
+   * Bounds omega so that the acceleration jump at t=0 stays within a_max, and -- only when the
+   * resulting k = omega*offset/B falls in [k_threshold, 3] -- additionally bounds the later interior
+   * extremum x''(t*) (see the "Approximate A-Limit" note above).
+   *
+   * v_zero and offset are magnitudes (this mirrors determine_lin_omega()'s v_max/v_zero/a signature), so
+   * the true sign relationship between the initial twist and the offset A_ is unknown here. The t=0
+   * bound therefore assumes the worst-case *diverging* alignment (B = v_zero + omega*offset, which
+   * maximizes |x''(0)|); the k-window check instead assumes the worst-case *converging* alignment
+   * (B = omega*offset - v_zero), since that is the only sign combination under which the interior
+   * extremum can dominate at all. Using different worst cases for the two checks is conservative by
+   * construction: whichever alignment actually occurs, at least one of the two checks bounds it.
+   */
+  inline ScalarType determine_acc_omega(const ScalarType a_max, const ScalarType v_max, const ScalarType v_zero,
+                                        const ScalarType offset) const
+  {
+    assert(a_max >= 0.0);
+    assert(v_max >= 0.0);
+    assert(v_zero >= 0.0);
+    assert(offset >= 0.0);
+    assert(settings->omega_min() > 0.0);
+    assert(settings->omega_max() >= settings->omega_min());
+
+    // |x''(0)| <= a_max  <=>  omega^2 * offset + 2 * omega * v_zero <= a_max (worst-case diverging B).
+    ScalarType omega_bound;
+    if (offset > static_cast<ScalarType>(0)) {
+      omega_bound = (-v_zero + std::sqrt((v_zero * v_zero) + (offset * a_max))) / offset;
+    } else if (v_zero > static_cast<ScalarType>(0)) {
+      // offset == 0: |x''(0)| = 2 * omega * v_zero, grows with omega -- solve the (now linear) bound.
+      omega_bound = a_max / (static_cast<ScalarType>(2) * v_zero);
+    } else {
+      // offset == 0 and v_zero == 0: x''(0) is zero for any omega, so this constraint doesn't apply;
+      // defer entirely to the velocity-based omega.
+      omega_bound = settings->omega_max();
+    }
+    omega_bound = std::clamp(omega_bound, settings->omega_min(), settings->omega_max());
+
+    // Worst-case *converging* B, evaluated at the omega chosen above, to check whether the interior
+    // extremum needs its own bound too.
+    const ScalarType b_converging = (omega_bound * offset) - v_zero;
+    if (b_converging > static_cast<ScalarType>(0)) {
+      const ScalarType k = (omega_bound * offset) / b_converging;
+      if ((k >= k_threshold) && (k <= static_cast<ScalarType>(3))) {
+        // x''(t*) = -(omega/e) * x'(t_a0), and the velocity limiter already keeps |x'(t_a0)| ~= v_max,
+        // so bound the interior extremum directly against a_max: omega <= e * a_max / v_max.
+        const ScalarType omega_interior = (v_max > static_cast<ScalarType>(0)) ?
+                                              std::clamp(std::numbers::e_v<ScalarType> * a_max / v_max,
+                                                         settings->omega_min(), settings->omega_max()) :
+                                              settings->omega_min();
+        omega_bound = std::min(omega_bound, omega_interior);
+      }
+    }
+
+    return omega_bound;
+  }
+
+public:
+  std::shared_ptr<KinematicTrajectorySettingsType> settings;
+
+private:
   ScalarType omega_;
   TimestampType start_time_;
   PoseType goal_;

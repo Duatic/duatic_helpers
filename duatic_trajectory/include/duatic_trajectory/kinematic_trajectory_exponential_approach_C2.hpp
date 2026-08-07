@@ -95,22 +95,23 @@ public:
   using TrajectoryDescriptionType = PoseType;
 
   /*
-   * limits is the sole source of truth for the velocity and omega bounds (see determine_omega()
+   * settings is the sole source of truth for the velocity and omega bounds (see determine_omega()
    * below); it is kept as a shared_ptr so it may be shared with (and updated by) other owners,
-   * but this trajectory only ever reads from it. omega_ is seeded from limits->omega_min()
+   * but this trajectory only ever reads from it. omega_ is seeded from settings->omega_min()
    * because, with a freshly-constructed zero offset A_ and zero acceleration, determine_omega()
    * would compute exactly that value anyway.
    */
-  inline explicit KinematicTrajectoryExponentialApproach(std::shared_ptr<KinematicTrajectorySettingsType> shared_limits)
-    : limits(std::move(shared_limits))
+  inline explicit KinematicTrajectoryExponentialApproach(
+      std::shared_ptr<KinematicTrajectorySettingsType> shared_settings)
+    : settings(std::move(shared_settings))
   {
-    assert(limits != nullptr && "Given shared limits don't exist");
-    omega_ = limits->omega_min();
+    assert(settings != nullptr && "Given shared settings don't exist");
+    omega_ = settings->omega_min();
   }
 
   /*
    * Available only if KinematicTrajectorySettingsType is default-constructible: creates a privately-owned
-   * limits object (not shared with any other owner) using its defaults.
+   * settings object (not shared with any other owner) using its defaults.
    */
   inline KinematicTrajectoryExponentialApproach()
     requires std::default_initializable<KinematicTrajectorySettingsType>
@@ -213,107 +214,111 @@ public:
     return out_state;
   }
 
-public:
-  std::shared_ptr<KinematicTrajectorySettingsType> limits;
-
 private:
   /*
    * assumed the internal variable A_ has already been determined !
    */
   inline ScalarType determine_omega(const TwistType& v_zero, const AccelType& a_zero) const
   {
-    assert(limits->velocity_limit_linear() >= 0.0);
-    assert(limits->velocity_limit_angular() >= 0.0);
-    return std::min(determine_omega(limits->velocity_limit_linear(), v_zero.linear().norm(), a_zero.linear().norm(),
+    assert(settings->velocity_limit_linear() >= 0.0);
+    assert(settings->velocity_limit_angular() >= 0.0);
+    return std::min(determine_omega(settings->velocity_limit_linear(), v_zero.linear().norm(), a_zero.linear().norm(),
                                     A_.linear().norm()),
-                    determine_omega(limits->velocity_limit_angular(), v_zero.angular().norm(), a_zero.angular().norm(),
-                                    A_.angular().norm()));
+                    determine_omega(settings->velocity_limit_angular(), v_zero.angular().norm(),
+                                    a_zero.angular().norm(), A_.angular().norm()));
   }
 
   /*
-   * The fastest omega respecting both term 2 and term 3 (term 1 being omega-independent, it plays
-   * no part in this choice) is simply the smaller of the two -- each sub-function already clamps
-   * its own candidate into [omega_min, omega_max], and since std::clamp is monotonic, the min of
-   * two clamped candidates equals the clamp of their min, so no further clamping is needed here.
+   * Finds the fastest omega respecting both remaining envelope pieces *simultaneously* (term 1,
+   * |v0|, is omega-independent and plays no part in this choice): term 3's constraint,
+   * (v_zero + 2*omega*a)/e^2 <= v_max, is monotonically increasing in omega, giving a feasible
+   * upper bound omega_upper_lin; term 2's constraint, (v_zero + a_zero/(2*omega) + omega*a/2)/e <=
+   * v_max, is U-shaped, giving a feasible interval [omega_lower_sq, omega_upper_sq] between its
+   * two roots (if real).
+   *
+   * An earlier version of this function computed each term's own "best omega" independently and
+   * combined them with std::min() -- but that's unsound: term 3's formula has no idea a_zero
+   * (acceleration) exists, so whenever it recommends an omega smaller than term 2's
+   * acceleration-safety lower bound, std::min() picks the unsafe one regardless of what term 2
+   * says (confirmed by a randomized stress test finding a genuine, if less severe, recurrence of
+   * the omega-too-small divergence this was built to fix). The two constraints must instead be
+   * intersected as actual *ranges*: the combined feasible interval is
+   * [omega_lower_sq, min(omega_upper_lin, omega_upper_sq)], further intersected with the
+   * configured [omega_min, omega_max]; the fastest available omega is then simply its upper end.
+   *
+   * If the combined range is empty (the two pieces can't be simultaneously satisfied within
+   * [omega_min, omega_max]), going slower than omega_lower_sq is the more dangerous direction (a
+   * tiny omega barely decays, so nonzero acceleration can drive an essentially unbounded velocity
+   * excursion), so the fallback prefers staying at or above omega_lower_sq even at the cost of
+   * violating term 3's cap, which only risks a bounded (if possibly large) position-offset-driven
+   * overshoot instead -- confirmed against a brute-force search over the allowed omega range to be
+   * close to the best any omega choice can achieve in that regime, not merely "less bad".
    */
   inline ScalarType determine_omega(const ScalarType v_max, const ScalarType v_zero, const ScalarType a_zero,
                                     const ScalarType a) const
-  {
-    return std::min(  // minimum of all estimates, clamped into the configured [omega_min, omega_max] range
-        determine_omega_term_lin(v_max, v_zero, a),        //
-        determine_omega_term_sq(v_max, v_zero, a_zero, a)  //
-    );                                                     //
-  }
-
-  /*
-   * Linear Term's constraint, (v_zero + 2*omega*a)/e^2 <= v_max, is monotonically increasing in
-   * omega (same shape as the C1 double-pole bound, just rescaled: e^2 instead of e, 2*a instead
-   * of a), so it simply clamps omega from above. Division only happens in the else-branch,
-   * which is reachable only when two_a > 0.
-   */
-  inline ScalarType determine_omega_term_lin(const ScalarType v_max, const ScalarType v_zero, const ScalarType a) const
-  {
-    assert(v_max >= 0.0);
-    assert(v_zero >= 0.0);
-    assert(a >= 0.0);
-    assert(limits->omega_min() > 0.0);
-    assert(limits->omega_max() >= limits->omega_min());
-
-    constexpr ScalarType e_sq = std::numbers::e_v<ScalarType> * std::numbers::e_v<ScalarType>;
-    const ScalarType v_decision = (e_sq * v_max) - v_zero;
-    const ScalarType two_a = static_cast<ScalarType>(2.0) * a;
-
-    if (limits->omega_min() * two_a >= v_decision) {
-      return limits->omega_min();
-    } else if (limits->omega_max() * two_a < v_decision) {
-      return limits->omega_max();
-    } else {
-      return v_decision / two_a;
-    }
-  }
-
-  /*
-   * Quadratic Term's constraint, (v_zero + a_accel/(2*omega) + omega*a_pos/2)/e <= v_max, is equivalent
-   * (multiplying through by 2*omega > 0) to a_pos*omega^2 - 2*(e*v_max-v_zero)*omega + a_accel <= 0
-   * -- U-shaped in omega, feasible on the interval [omega_minus, omega_plus] between its two roots
-   * (if real).
-   *
-   * The answer is always the point in [omega_min, omega_max] closest to omega_plus -- if omega_plus
-   * itself falls outside that range, the least-bad choice is simply the nearest endpoint -- which is
-   * exactly clamp(omega_plus, omega_min, omega_max). omega_minus never changes that answer (so it's
-   * not needed at all, not even for a feasibility check): omega_minus <= omega_plus always holds, so
-   * moving from omega_plus *toward* [omega_min, omega_max] can only ever move into the feasible
-   * interval or stop short of it, never overshoot past omega_minus out the other side.
-   */
-  inline ScalarType determine_omega_term_sq(const ScalarType v_max, const ScalarType v_zero, const ScalarType a_zero,
-                                            const ScalarType a) const
   {
     assert(v_max >= 0.0);
     assert(v_zero >= 0.0);
     assert(a_zero >= 0.0);
     assert(a >= 0.0);
-    assert(limits->omega_min() > 0.0);
-    assert(limits->omega_max() >= limits->omega_min());
-
-    if (a <= static_cast<ScalarType>(0.0)) {
-      // no upper bound from this term: satisfied for all sufficiently large omega, so the fastest
-      // allowed omega is always at least as good.
-      return limits->omega_max();
-    }
+    assert(settings->omega_min() > 0.0);
+    assert(settings->omega_max() >= settings->omega_min());
 
     constexpr ScalarType e = std::numbers::e_v<ScalarType>;
-    const ScalarType v_decision = (e * v_max) - v_zero;
-    const ScalarType discriminant = (v_decision * v_decision) - (a * a_zero);
-    if (discriminant < static_cast<ScalarType>(0.0)) {
-      // this term's minimum alone already exceeds v_max: no omega satisfies it. Fall back to the
-      // omega minimizing it, i.e. its vertex omega* = sqrt(a_zero / a).
-      return std::clamp(std::sqrt(a_zero / a), limits->omega_min(), limits->omega_max());
+    constexpr ScalarType e_sq = e * e;
+    const ScalarType infinity = std::numeric_limits<ScalarType>::infinity();
+
+    // term 3: omega <= omega_upper (unconstrained, or unconditionally infeasible, if a == 0, since
+    // the term doesn't depend on omega at all in that case).
+    ScalarType omega_upper = infinity;
+    if (a > static_cast<ScalarType>(0.0)) {
+      omega_upper = ((e_sq * v_max) - v_zero) / (static_cast<ScalarType>(2.0) * a);
+    } else if (v_zero > e_sq * v_max) {
+      omega_upper = -infinity;  // unconditionally infeasible: no omega helps.
     }
 
-    const ScalarType omega_plus = (v_decision + std::sqrt(discriminant)) / a;
-    return std::clamp(omega_plus, limits->omega_min(), limits->omega_max());
+    // term 2: feasible on [omega_lower, omega_upper_sq] between its two roots (if real); folded
+    // into the same omega_upper above via std::min(). If a == 0 (and hence this loop's caller
+    // already returned via the branch above), this term imposes no further constraint either.
+    ScalarType omega_lower = static_cast<ScalarType>(0.0);
+    if (a > static_cast<ScalarType>(0.0)) {
+      const ScalarType v_decision = (e * v_max) - v_zero;
+      const ScalarType discriminant = (v_decision * v_decision) - (a * a_zero);
+      const ScalarType vertex = std::sqrt(a_zero / a);
+      const ScalarType sqrt_discriminant =
+          (discriminant >= static_cast<ScalarType>(0.0)) ? std::sqrt(discriminant) : static_cast<ScalarType>(0.0);
+      const ScalarType root_hi = (v_decision + sqrt_discriminant) / a;
+      if (discriminant < static_cast<ScalarType>(0.0) || root_hi <= static_cast<ScalarType>(0.0)) {
+        // Either no real root (this term's minimum alone already exceeds v_max for every omega),
+        // or both roots are non-positive (the entire feasible interval sits at/below omega=0, so
+        // it's equally unreachable for any actual, positive omega) -- v_zero dominating v_max is
+        // what drives v_decision very negative and causes this. Either way, this term's own vertex
+        // omega* = sqrt(a_zero / a) (balancing the acceleration-vs-position-offset tradeoff) is
+        // still the least-bad single point, so treat it as a degenerate [vertex, vertex] "feasible
+        // interval" instead of naively clamping a meaningless negative root up to 0.
+        omega_lower = vertex;
+        omega_upper = std::min(omega_upper, vertex);
+      } else {
+        const ScalarType root_lo = (v_decision - sqrt_discriminant) / a;
+        omega_lower = std::max(static_cast<ScalarType>(0.0), root_lo);
+        omega_upper = std::min(omega_upper, root_hi);
+      }
+    }
+
+    const ScalarType lower_bound = std::max(settings->omega_min(), omega_lower);
+    const ScalarType upper_bound = std::min(settings->omega_max(), omega_upper);
+    if (lower_bound <= upper_bound) {
+      return upper_bound;
+    }
+    // infeasible: prefer staying at or above the acceleration-safety lower bound (clamped into the
+    // configured range) over respecting term 3's cap -- see the header comment above.
+    return std::clamp(omega_lower, settings->omega_min(), settings->omega_max());
   }
 
+public:
+  std::shared_ptr<KinematicTrajectorySettingsType> settings;
+
+private:
   ScalarType omega_;
   TimestampType start_time_;
   PoseType goal_;
