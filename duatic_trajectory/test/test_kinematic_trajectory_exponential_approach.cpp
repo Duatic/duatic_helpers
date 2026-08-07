@@ -191,10 +191,15 @@ struct ConvergenceSettingsProfile
   double omega_min, omega_max;
 };
 
+// omega_min/omega_max here must respect KinematicTrajectorySettingsExponentialApproachDefault's
+// own omega_min_upper_bound/omega_max_lower_bound (omega_min <= 1e-6, omega_max >= 1e3); this
+// doesn't hurt convergence -- these are just the allowed *range*, and each profile's v_max is
+// generous enough (relative to these tests' hardcoded initial speeds) that the actual omega picked
+// comes from the smooth formula, not the omega_min floor, regardless of how tiny that floor is.
 constexpr std::array<ConvergenceSettingsProfile, 3> convergence_settings_profiles{ {
-    { "moderate", 1.0, 2.0 * std::numbers::pi, 1.0, 2.0 * std::numbers::pi, 0.05, 10.0 },
-    { "brisk", 2.5, 5.0, 2.5, 5.0, 0.1, 25.0 },
-    { "generous", 6.0, 12.0, 6.0, 12.0, 0.2, 60.0 },
+    { "moderate", 1.0, 2.0 * std::numbers::pi, 1.0, 2.0 * std::numbers::pi, 1e-6, 1e3 },
+    { "brisk", 2.5, 5.0, 2.5, 5.0, 1e-7, 2e3 },
+    { "generous", 6.0, 12.0, 6.0, 12.0, 1e-8, 5e3 },
 } };
 
 template <typename Trajectory>
@@ -521,7 +526,7 @@ TYPED_TEST(KinematicTrajectoryExponentialApproachTest, KnownExamplesRespectVeloc
     SCOPED_TRACE("pure linear displacement from rest");
     auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -541,7 +546,7 @@ TYPED_TEST(KinematicTrajectoryExponentialApproachTest, KnownExamplesRespectVeloc
     SCOPED_TRACE("pure rotation from rest");
     auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -562,7 +567,7 @@ TYPED_TEST(KinematicTrajectoryExponentialApproachTest, KnownExamplesRespectVeloc
     SCOPED_TRACE("combined linear and angular displacement from rest");
     auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.4, 0.8));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -609,8 +614,11 @@ TYPED_TEST(KinematicTrajectoryExponentialApproachTest, RandomTrajectoriesRespect
 
   std::mt19937 rng(1337);  // fixed seed: failures must be reproducible, not flaky
   std::uniform_real_distribution<double> v_max_dist(0.1, 5.0);
-  std::uniform_real_distribution<double> omega_min_dist(0.05, 1.0);
-  std::uniform_real_distribution<double> omega_max_dist(1.0, 50.0);
+  // omega_min/omega_max must respect the settings' own omega_min_upper_bound (1e-6) /
+  // omega_max_lower_bound (1e3); omega_min is drawn from a tiny sliver below that upper bound, and
+  // omega_max_dist's span dwarfs it, so the sum below still lands safely above omega_max_lower_bound.
+  std::uniform_real_distribution<double> omega_min_dist(1e-9, 1e-6);
+  std::uniform_real_distribution<double> omega_max_dist(1e3, 5e3);
 
   // a coarser horizon/sample rate than the hand-picked examples above, to keep number_of_simulations
   // trajectories running in reasonable time while still covering a broad parameter space, including
@@ -659,7 +667,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
     auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
     ASSERT_TRUE(settings->set_acceleration_limits(0.2, 0.4));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -680,7 +688,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
     auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
     ASSERT_TRUE(settings->set_acceleration_limits(0.2, 0.4));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -702,7 +710,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
     auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.4, 0.8));
     ASSERT_TRUE(settings->set_acceleration_limits(0.15, 0.3));
-    ASSERT_TRUE(settings->set_omega_limits(0.01, 10.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());  // start at rest
@@ -716,17 +724,19 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
     verifyMaxAccelerationInvariant(traj, start_time);
   }
 
-  // Regression-style case: the offset is large enough, relative to omega_min, that the acceleration
-  // bound is structurally infeasible (see determine_acc_omega()'s comment on this) -- omega_min
-  // alone already produces a t=0 jump beyond a_max, so a_max can't actually be met, only
-  // approached as closely as omega_min allows. verifyMaxAccelerationInvariant()'s floor absorbs
-  // this by measuring the trajectory's actual resulting initial acceleration.
+  // Large-offset case: exercises verifyMaxAccelerationInvariant()'s floor (which measures the
+  // trajectory's actual resulting initial acceleration) against a big offset and a small a_max.
+  // Note: this used to demonstrate the structurally-infeasible regime from determine_acc_omega()'s
+  // comment (a large omega_min forcing a t=0 jump beyond a_max) directly via a raised omega_min, but
+  // omega_min is now capped at omega_min_upper_bound (1e-6) by set_omega_limits() itself, and at that
+  // scale the natural solve is comfortably feasible again for any offset/a_max combination sane
+  // enough to write down here -- so this no longer reaches that particular regime.
   for (const double a_max : { 0.05, 0.1, 0.5 }) {
-    SCOPED_TRACE(::testing::Message() << "large offset relative to omega_min, a_max=" << a_max);
+    SCOPED_TRACE(::testing::Message() << "large offset, a_max=" << a_max);
     auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(1000.0, 1000.0));
     ASSERT_TRUE(settings->set_acceleration_limits(a_max, 1000.0));
-    ASSERT_TRUE(settings->set_omega_limits(0.5, 1000.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
 
     const geometry::Pose3Dd x0 = makePose(50.0, 0, 0, Eigen::Quaterniond::Identity());
     const geometry::Twist3Dd v0(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
@@ -747,8 +757,10 @@ TEST(KinematicTrajectoryExponentialApproachC1, RandomTrajectoriesRespectAccelera
   std::mt19937 rng(1337);  // fixed seed: failures must be reproducible, not flaky
   std::uniform_real_distribution<double> v_max_dist(0.1, 5.0);
   std::uniform_real_distribution<double> a_max_dist(0.05, 5.0);
-  std::uniform_real_distribution<double> omega_min_dist(0.05, 1.0);
-  std::uniform_real_distribution<double> omega_max_dist(1.0, 50.0);
+  // omega_min/omega_max must respect the settings' own omega_min_upper_bound (1e-6) /
+  // omega_max_lower_bound (1e3); see RandomTrajectoriesRespectVelocityLimit's identical comment.
+  std::uniform_real_distribution<double> omega_min_dist(1e-9, 1e-6);
+  std::uniform_real_distribution<double> omega_max_dist(1e3, 5e3);
 
   constexpr double random_horizon_s = 60.0;
   constexpr double random_samples_per_second = 50.0;
@@ -804,6 +816,78 @@ TEST(KinematicTrajectoryExponentialApproachC2, EvaluateAtUpdateTimeReproducesThe
   EXPECT_TRUE(eval.twist().angular().isApprox(v0.angular(), 1e-9));
   EXPECT_TRUE(eval.accel().linear().isApprox(a0.linear(), 1e-9));
   EXPECT_TRUE(eval.accel().angular().isApprox(a0.angular(), 1e-9));
+}
+
+/*
+ * Settings validation: the setters below are documented to return false (and leave all state
+ * unchanged) for invalid input, and true (having applied the new values) for valid input. These
+ * exercise both sides of that contract directly against the settings types, rather than indirectly
+ * through a trajectory.
+ */
+TEST(KinematicTrajectorySettingsDefaultTest, SetVelocityLimitsAcceptsValidRejectsInvalid)
+{
+  trajectory::KinematicTrajectorySettingsDefault<double> settings;
+
+  // valid: any non-negative pair (including zero) is accepted and actually applied
+  EXPECT_TRUE(settings.set_velocity_limits(0.0, 0.0));
+  EXPECT_TRUE(settings.set_velocity_limits(1.5, 2.5));
+  EXPECT_DOUBLE_EQ(settings.velocity_limit_linear(), 1.5);
+  EXPECT_DOUBLE_EQ(settings.velocity_limit_angular(), 2.5);
+
+  // invalid: any negative component is rejected, leaving the previous (valid) values untouched
+  EXPECT_FALSE(settings.set_velocity_limits(-1.0, 2.5));
+  EXPECT_FALSE(settings.set_velocity_limits(1.5, -2.5));
+  EXPECT_FALSE(settings.set_velocity_limits(-1.0, -2.5));
+  EXPECT_DOUBLE_EQ(settings.velocity_limit_linear(), 1.5);
+  EXPECT_DOUBLE_EQ(settings.velocity_limit_angular(), 2.5);
+}
+
+TEST(KinematicTrajectorySettingsDefaultTest, SetAccelerationLimitsAcceptsValidRejectsInvalid)
+{
+  trajectory::KinematicTrajectorySettingsDefault<double> settings;
+
+  // valid: any non-negative pair (including zero) is accepted and actually applied
+  EXPECT_TRUE(settings.set_acceleration_limits(0.0, 0.0));
+  EXPECT_TRUE(settings.set_acceleration_limits(0.8, 1.2));
+  EXPECT_DOUBLE_EQ(settings.acceleration_limit_linear(), 0.8);
+  EXPECT_DOUBLE_EQ(settings.acceleration_limit_angular(), 1.2);
+
+  // invalid: any negative component is rejected, leaving the previous (valid) values untouched
+  EXPECT_FALSE(settings.set_acceleration_limits(-0.1, 1.2));
+  EXPECT_FALSE(settings.set_acceleration_limits(0.8, -1.2));
+  EXPECT_FALSE(settings.set_acceleration_limits(-0.1, -1.2));
+  EXPECT_DOUBLE_EQ(settings.acceleration_limit_linear(), 0.8);
+  EXPECT_DOUBLE_EQ(settings.acceleration_limit_angular(), 1.2);
+}
+
+TEST(KinematicTrajectorySettingsExponentialApproachDefaultTest, SetOmegaLimitsAcceptsValidRejectsInvalid)
+{
+  using Settings = trajectory::KinematicTrajectorySettingsExponentialApproachDefault<double>;
+  Settings settings;
+  constexpr double upper = Settings::omega_min_upper_bound;  // omega_min must fall in (0, upper]
+  constexpr double lower = Settings::omega_max_lower_bound;  // omega_max must be >= lower (and >= omega_min)
+
+  // valid: omega_min in (0, upper], omega_max >= max(omega_min, lower)
+  EXPECT_TRUE(settings.set_omega_limits(upper, lower));
+  EXPECT_DOUBLE_EQ(settings.omega_min(), upper);
+  EXPECT_DOUBLE_EQ(settings.omega_max(), lower);
+  EXPECT_TRUE(settings.set_omega_limits(upper / 10.0, lower * 5.0));
+  EXPECT_DOUBLE_EQ(settings.omega_min(), upper / 10.0);
+  EXPECT_DOUBLE_EQ(settings.omega_max(), lower * 5.0);
+
+  // invalid: omega_min <= 0
+  EXPECT_FALSE(settings.set_omega_limits(0.0, lower));
+  EXPECT_FALSE(settings.set_omega_limits(-upper, lower));
+  // invalid: omega_min above the upper bound
+  EXPECT_FALSE(settings.set_omega_limits(upper * 10.0, lower));
+  // invalid: omega_max below omega_min
+  EXPECT_FALSE(settings.set_omega_limits(upper, upper / 2.0));
+  // invalid: omega_max below the lower bound, even though omega_max >= omega_min
+  EXPECT_FALSE(settings.set_omega_limits(upper / 10.0, lower / 10.0));
+
+  // none of the invalid calls above should have changed the settings from their last valid state
+  EXPECT_DOUBLE_EQ(settings.omega_min(), upper / 10.0);
+  EXPECT_DOUBLE_EQ(settings.omega_max(), lower * 5.0);
 }
 
 }  // namespace

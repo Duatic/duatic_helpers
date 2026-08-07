@@ -7,6 +7,8 @@ covering both the double-pole (C1, velocity-continuous) variant in
 [`kinematic_trajectory_exponential_approach_C1.hpp`](kinematic_trajectory_exponential_approach_C1.hpp)
 and the triple-pole (C2, acceleration-continuous) variant in
 [`kinematic_trajectory_exponential_approach_C2.hpp`](kinematic_trajectory_exponential_approach_C2.hpp).
+The C1 section covers both of that variant's limits: the velocity (`V-Limit`) bound on $x'(t)$, and
+the acceleration (`A-Limit`) bound on $x''(t)$ enforced by `determine_acc_omega()`.
 
 # C1 (Twist-continuity) variant
 
@@ -264,6 +266,238 @@ $$
   \frac{e\, v_{\max} - \lVert v_0 \rVert}{\lVert A\rVert} &:\quad else
 \end{cases}
 $$
+
+---
+
+## Acceleration (A-Limit) Invariant
+
+> **Claim.** For all $t \ge 0$,
+> $$
+> \lVert x''(t)\rVert \;\le\; \max\big\{\lVert x''(0)\rVert,\ \lvert x''(t^*)\rvert\big\}, \qquad t^* = \frac{3}{\omega} - \frac{A}{B}\quad(\text{only when } t^*\ge0),
+> $$
+> and, writing $k := \omega A/B$ (as in the header note), $\lvert x''(t^*)\rvert$ exceeds $\lVert x''(0)\rVert$ **only** for
+> $$
+> k \in (k_{\text{th}},\,3), \qquad k_{\text{th}} := 2 - W(1/e) \approx 1.721535457,
+> $$
+> where $W$ is the Lambert $W$ function (the inverse of $w \mapsto w e^w$). Outside that window
+> (including all $k > 3$, where $t^* < 0$ falls outside the trajectory's domain), $\lVert x''(0)\rVert$
+> alone is the exact peak.
+
+This is the bound behind the header's `ALTERNATIVE: Approximate A-Limit` note and the analysis
+`determine_acc_omega()` implements. Unlike $x'(t)$ — whose worst case is governed by a single
+stationary point of $x''(t)$ — $x''(t)$ is one derivative further into the same polynomial-times-exponential
+family, so *its* extremum condition (a stationary point of $x'''(t)$, i.e. jerk $=0$) is only ever
+relevant strictly inside $t>0$; the domain boundary $t=0$ is always a second candidate, and either
+one can be the true global peak depending on the initial conditions.
+
+### Setup — reduce to a single scalar critical-point problem
+
+Substituting $B=v_0+\omega A$ into $x''(t) = \omega\big(\omega(A+Bt)-2B\big)e^{-\omega t}$ and
+expanding shows that $x''(t)$, exactly like $x'(t)$, is a linear combination of the *constant*
+vectors $A, v_0$ with scalar, time-varying coefficients. By the **same convexity argument as Step 1**
+above (only the coefficients' shape differs, not the structure of the argument), the worst case over
+all relative orientations of $A$ and $v_0$ — for fixed norms $c=\lVert A\rVert,\ a=\lVert v_0\rVert$ —
+again occurs when they are collinear. Writing $v_0 = a\hat e,\ A=\varepsilon c\hat e$
+($\varepsilon=\pm1$) and $x''(t) = h(t)\,e^{-\omega t}$ reduces the problem to a single scalar linear
+function $h(t) = Qt+P$.
+
+**Lemma C** (single stationary point). For $h(t)=Qt+P$ ($P,Q\in\mathbb R,\ Q\ne0$) and $\omega>0$:
+$$
+\frac{d}{dt}\big[h(t)e^{-\omega t}\big] = \big[Q-\omega(Qt+P)\big]e^{-\omega t},
+$$
+which has a single zero at $t_{\text{ext}} = \tfrac1\omega - \tfrac PQ$. If $t_{\text{ext}}<0$,
+$h(t)e^{-\omega t}$ is monotonic on all of $[0,\infty)$ (its derivative's sign only changes at
+$t_{\text{ext}}$, which lies outside the domain), so
+$$
+\sup_{t\ge0}\lvert h(t)\rvert e^{-\omega t} = \lvert h(0)\rvert = \lvert P\rvert.
+$$
+If $t_{\text{ext}}\ge0$, $h(t)e^{-\omega t}$ is separately monotonic on $[0,t_{\text{ext}}]$ and on
+$[t_{\text{ext}},\infty)$ (same reason) and decays to $0$ as $t\to\infty$, so
+$$
+\sup_{t\ge0}\lvert h(t)\rvert e^{-\omega t} = \max\big(\lvert h(0)\rvert,\ \lvert h(t_{\text{ext}})\rvert e^{-\omega t_{\text{ext}}}\big).
+$$
+(The degenerate case $Q=0$ — a constant $h$ — is not excluded in spirit: it simply means
+$t_{\text{ext}}$ recedes to $\mp\infty$, so $h(t)e^{-\omega t}$ is trivially monotonic on $[0,\infty)$
+and $\lvert h(0)\rvert$ is the sup, consistent with the $t_{\text{ext}}<0$ branch.) $\blacksquare$
+
+Collecting the $A, v_0$ coefficients of $x''(t)$ along $\hat e$ gives
+$$
+h(t) = Qt+P, \qquad Q = \omega^2(\omega\varepsilon c + a), \qquad P = -\omega(\omega\varepsilon c+2a) = x''(0)
+\ \text{(along }\hat e\text{)},
+$$
+matching the header's $x''(0)=-(\omega^2A+2\omega v_0)$. Writing $B=a+\omega\varepsilon c$ (i.e. $B$
+along $\hat e$) and $k:=\omega A/B$, a direct substitution shows Lemma C's $t_{\text{ext}}$ works out
+to exactly $t^*=3/\omega-A/B$ from the header note, and
+
+$$
+h(t_{\text{ext}})\,e^{-\omega t_{\text{ext}}} = \frac{Q}{\omega}\,e^{\omega P/Q - 1} = \omega B\,e^{k-3} = x''(t^*),
+$$
+
+reproducing the header's $x''(t^*)=\omega B\,e^{\omega A/B-3}$ exactly (both this identity and
+$t_{\text{ext}}=t^*$ hold for **either** sign of $\varepsilon$ — Lemma C never needed a case split on
+$\varepsilon$ in the first place, which is what makes this route shorter than repeating the $V$-limit
+proof's $\varepsilon=\pm1$ analysis verbatim).
+
+### When does the interior point dominate?
+
+By Lemma C, $\lVert x''(t)\rVert \le \max(\lvert x''(0)\rvert, \lvert x''(t^*)\rvert)$ whenever
+$t^*\ge0$ (i.e. $k\le3$), and $\lVert x''(t)\rVert\le\lvert x''(0)\rvert$ outright when $t^*<0$
+($k>3$). Their ratio, using $v_0 = B(1-k)$ (from $k=\omega A/B$ and $B=v_0+\omega A$, so
+$x''(0)=-\omega(B+v_0)=-\omega B(2-k)$):
+
+$$
+\frac{x''(0)}{x''(t^*)} \;=\; \frac{-\omega B(2-k)}{\omega B\,e^{k-3}} \;=\; (k-2)\,e^{3-k} \;=:\; h(k).
+$$
+
+$h(k)$ is strictly **increasing** throughout $k<3$ (since $h'(k)=e^{3-k}(3-k)>0$ there), with
+$h(2)=0$ and $h(3)=1$. Consequently $\lvert h(k)\rvert$ *decreases* from $+\infty$ down to $0$ as $k$
+increases from $-\infty$ to $2$, then *increases* from $0$ back up to $1$ as $k$ goes from $2$ to $3$
+— a "V" shape with its minimum at $k=2$. So $\lvert h(k)\rvert=1$ has exactly one solution besides
+$k=3$, at some $k_{\text{th}}<2$:
+
+**Key Lemma (threshold).** $\lvert h(k)\rvert=1$ for $k<2$ iff $k = 2-W(1/e)$, where $W$ is the
+Lambert $W$ function.
+
+*Proof.* For $k<2$, $\lvert h(k)\rvert = (2-k)e^{3-k}$. Substitute $w=2-k>0$:
+$(2-k)e^{3-k} = w\,e^{1+w}$. Setting this to $1$: $w\,e^w = e^{-1}$, i.e. $w=W(e^{-1})$, so
+$k=2-W(1/e)$. $\blacksquare$
+
+Numerically $k_{\text{th}} := 2-W(1/e) \approx 1.721535457$. Since $\lvert h(k)\rvert$ decreases on
+$(-\infty,2)$ and increases on $(2,3)$ (shown above), $\lvert h(k)\rvert<1$ — the interior term
+dominates — **exactly** for $k\in(k_{\text{th}},3)$, and $\lvert h(k)\rvert\ge1$ (boundary dominates
+or, at the two endpoints, ties) everywhere else with $k<3$; for $k\ge3$ there is no interior critical
+point inside the domain at all, so $\lvert x''(0)\rvert$ is trivially the whole story.
+
+### Combined invariant
+
+Putting the collinear reduction (Step 1) together with Lemma C and the threshold above:
+
+$$
+\lVert x''(t)\rVert \;\le\; \max\big\{\lVert x''(0)\rVert,\ \lvert x''(t^*)\rvert\big\} \quad\text{for all } t\ge0,
+$$
+
+with the second term inside the max only ever exceeding the first for
+$k=\omega A/B \in (k_{\text{th}}, 3)$, $k_{\text{th}}=2-W(1/e)\approx1.721535457$. This is the claimed
+invariant. $\blacksquare$
+
+## Remarks
+
+### Tightness
+Unlike the $V$-limit's $(\lVert v_0\rVert+\omega\lVert A\rVert)/e$ bound (itself already a loose-by-a-
+controlled-margin estimate — see that section's own Tightness remark), this acceleration bound is
+**exact**: the collinear reduction is loss-free (Step 1's convexity argument), and Lemma C computes
+the true suprema $\lvert x''(0)\rvert,\ \lvert x''(t^*)\rvert$ rather than an over-approximation of
+them.
+
+### Intuition
+* Because only pose and twist — not accel — are matched at replan time (this is exactly what "C1"
+  means), $x''(0)$ is a **free** consequence of whatever $\omega$ the velocity limit ends up choosing;
+  nothing forces it to be small.
+* $\lVert x''(0)\rVert = \omega^2\lVert A\rVert + 2\omega\lVert v_0\rVert$ in the worst case, so once
+  $\omega$ is pinned at the velocity limit's own $\omega_{\min}$ floor (which happens for a large,
+  uncompensated offset — see the "$v_0$ already exceeds $v_{\max}$" regime in the $V$-limit
+  implementation relation above), the $t=0$ acceleration jump grows **without bound** as the offset
+  grows, since $\omega_{\min}$ no longer shrinks to compensate. This is exactly the gap
+  `determine_acc_omega()` exists to close.
+* The interior term only ever wins in the narrow $k\in(k_{\text{th}},3)$ window: physically, this is
+  the regime where the initial velocity is *already* directed toward the goal at close to (but not
+  exceeding) the "natural" rate $\omega\lVert A\rVert$ the trajectory itself would pick — so
+  $x''(0)\approx0$ (little correction needed at the very start) while the trajectory still has to
+  decelerate later, producing the interior bump $x''(t^*)$ instead.
+
+## Implementation relation
+
+`determine_acc_omega()` does **not** invert the tight invariant above directly. Doing so exactly would
+require knowing the *signed* relationship between $v_0$ and $A$ (i.e. which collinear case applies),
+but the function only ever receives $\lVert v_0\rVert$ and $\lVert A\rVert$ as unsigned magnitudes —
+mirroring `determine_vel_omega()`'s own `v_max, v_zero, a` signature (there too, `a` denotes
+$\lVert A\rVert$ — *not* the $a := \lVert v_0\rVert$ shorthand from the $V$-limit proof's Setup above;
+see the naming note at the end of this section). It also deliberately **ignores the $k_{\text{th}}$
+threshold** derived above: rather than gating the interior term on whether $k\in(k_{\text{th}},3)$, it
+bounds *both* candidate peaks unconditionally, using two independent worst-case sign assumptions, one
+per term.
+
+**Boundary term** ($\lvert x''(0)\rvert \le a_{\max}$): solved using the worst-case *diverging*
+alignment ($\varepsilon=+1$, which maximizes $\lvert x''(0)\rvert$ for given magnitudes), by mirroring
+`determine_vel_omega()`'s own structure of comparing the (division-free) constraint at the range's
+endpoints first, rather than solving and clamping afterward:
+
+$$
+f(\omega) := \omega^2\lVert A\rVert + 2\omega\lVert v_0\rVert \qquad \text{(non-decreasing in $\omega$, since $\lVert A\rVert,\lVert v_0\rVert\ge0$)}
+$$
+
+$$
+\omega_{\text{zero}} =
+\begin{cases}
+  \omega_{\min} &:\quad f(\omega_{\min}) \ge a_{\max} \quad\text{(already violated at the bottom of the range -- best effort)}\\
+  \omega_{\max} &:\quad f(\omega_{\max}) < a_{\max} \quad\text{(unconstrained even at the top of the range)}\\
+  \dfrac{a_{\max}}{\sqrt{\lVert v_0\rVert^2+\lVert A\rVert\, a_{\max}}+\lVert v_0\rVert} &:\quad \text{else}
+\end{cases}
+$$
+
+The $\omega_{\min}$ case is checked **first**, so an exact tie — both endpoint conditions holding at
+once, e.g. $\lVert A\rVert=\lVert v_0\rVert=a_{\max}=0$ — resolves to the safer, more restrictive
+$\omega_{\min}$ rather than the permissive $\omega_{\max}$.
+
+The `else` branch is the *rationalized* form of the direct quadratic root
+$\big({-}\lVert v_0\rVert+\sqrt{\lVert v_0\rVert^2+\lVert A\rVert\, a_{\max}}\big)/\lVert A\rVert$:
+multiplying numerator and denominator by the conjugate
+$\sqrt{\lVert v_0\rVert^2+\lVert A\rVert\, a_{\max}}+\lVert v_0\rVert$ cancels the $\lVert A\rVert$ in
+the denominator against a matching factor in the numerator, leaving no division by $\lVert A\rVert$ at
+all. This is both more numerically stable (no subtracting two close values when
+$\lVert A\rVert a_{\max} \ll \lVert v_0\rVert^2$) and, unlike the direct form, well-defined as
+$\lVert A\rVert\to0$ — it reduces exactly to $a_{\max}/(2\lVert v_0\rVert)$, the correct answer to the
+then-linear constraint — so no separate $\lVert A\rVert=0$ branch is needed at all.
+
+**Interior term**: bounded directly against $a_{\max}$ using the already-established approximation
+$\lvert x''(t^*)\rvert \approx (\omega/e)\,v_{\max}$ (since the velocity limiter keeps
+$\lvert x'(t_{a0})\rvert\approx v_{\max}$ — the $V$-limit invariant above), **applied
+unconditionally** rather than gated on $k\in(k_{\text{th}},3)$ as the tight invariant above would allow:
+
+$$
+\omega_{\text{interior}} =
+\begin{cases}
+  \omega_{\min} &:\quad \omega_{\min}\,v_{\max} \ge e\,a_{\max} \\
+  \omega_{\max} &:\quad \omega_{\max}\,v_{\max} < e\,a_{\max} \\
+  e\,a_{\max}/v_{\max} &:\quad \text{else}
+\end{cases}
+$$
+
+(rearranged as $\omega\,v_{\max} \le e\,a_{\max}$ — multiplying through by $v_{\max}\ge0$ — to sidestep
+$v_{\max}=0$ the same way the boundary term sidesteps $\lVert A\rVert=0$, rather than special-casing
+it), with $\omega_{\min}$ again checked first for the same tie-break reason.
+
+**Why unconditional is safe, just not tight**: outside the window $(k_{\text{th}},3)$, the tight
+invariant above already guarantees $\lvert x''(0)\rvert \ge \lvert x''(t^*)\rvert$, so additionally
+requiring $\omega\le\omega_{\text{interior}}$ there can only make the result *more* conservative than
+necessary — never unsafe. Skipping the $k$-window check entirely — rather than computing a trial $k$
+from a trial $\omega$ and branching on it — trades a small amount of unnecessary conservatism outside
+that narrow window for a simpler function with fewer branches and no dependency between the two terms.
+This is the same "conservative rather than exact" trade-off as using two different worst-case sign
+assumptions in the first place: it does not reproduce the tight collinear invariant above bit-for-bit,
+but guarantees a safe bound regardless of which alignment (or which side of $k_{\text{th}}$) the true
+configuration actually falls on — the same spirit as the C2 section below's own choice of two simpler,
+independently-invertible proxy constraints over its exact quadratic characterization.
+
+**Combining**:
+
+$$
+\omega = \min(\omega_{\text{zero}},\ \omega_{\text{interior}})
+$$
+
+clamped once more into $[\omega_{\min},\omega_{\max}]$ as cheap insurance against floating-point edge
+cases at the boundaries (both branches above are already constructed to land inside that range by
+themselves). As with the $V$-limit, separate linear and angular estimates are computed this way,
+combined with the velocity-based $\omega$ via a further $\min(\cdot,\cdot)$ in the caller, and the
+whole result is clamped to $[\omega_{\min},\omega_{\max}]$ once more there too.
+
+> **Naming note.** The code's parameter for $\lVert A\rVert$ (the offset magnitude) is the bare
+> identifier `a` — used, consistently across `determine_vel_omega()`, `determine_acc_omega()`, and
+> C2's `determine_omega()` overload, as the lowercase scalar counterpart of the vector member `A_`.
+> This is easy to misread against this document's *unrelated* convention of `a := \lVert v_0\rVert`
+> (used only within the $V$-limit and $A$-limit proofs' Setup sections above) — the two conventions
+> never appear together in this document's prose, but the code itself passes both `a_max` and `a` as
+> arguments to the very same function, which is worth keeping in mind when cross-referencing the two.
 
 ---
 

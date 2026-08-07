@@ -36,8 +36,19 @@ struct KinematicTrajectorySettingsExponentialApproachDefault : public BaseT
 {
   using ScalarType = typename BaseT::ScalarType;
 
-  ScalarType omega_min_{ 1.0E-6 };
-  ScalarType omega_max_{ 1.0E3 };
+  /*
+   * clamping omega (especially by omega_min) to a small positive value is necessary to avoid degenerating the
+   * trajectory into a straight line that never reaches the goal (see the attached mathematical proof). However, by
+   * clamping omega upward, the given limits may be violated, so this is the largest allowed value for omega_min, it
+   * does not make sense to set omega_min any higher than this.
+   */
+  static constexpr ScalarType omega_min_upper_bound{ 1.0E-6 };
+  static constexpr ScalarType omega_max_lower_bound{ 1.0E3 };
+  static_assert(omega_min_upper_bound > 0.0, "omega_min_upper_bound must be strictly positive");
+  static_assert(omega_max_lower_bound >= omega_min_upper_bound,  //
+                "omega_max_lower_bound must be >= omega_min_upper_bound");
+  ScalarType omega_min_{ omega_min_upper_bound };
+  ScalarType omega_max_{ omega_max_lower_bound };
 
   /*
    * Move-assigns the BaseT part from anything BaseT itself can be move-assigned from (BaseT
@@ -75,7 +86,8 @@ struct KinematicTrajectorySettingsExponentialApproachDefault : public BaseT
    */
   inline bool set_omega_limits(const ScalarType omega_min, const ScalarType omega_max)
   {
-    if ((omega_min <= static_cast<ScalarType>(0)) || (omega_max < omega_min)) {
+    if ((omega_min <= static_cast<ScalarType>(0.0)) || (omega_min > omega_min_upper_bound) || (omega_max < omega_min) ||
+        (omega_max < omega_max_lower_bound)) {
       return false;
     }
     omega_min_ = omega_min;
