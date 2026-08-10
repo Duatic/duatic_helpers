@@ -118,6 +118,11 @@ concept KinematicTrajectory =
       requires geometry::is_timed_v<typename T::UpdateStateType>;
       requires geometry::is_kinematic_state_v<typename T::UpdateStateType::DataType>;
 
+      // the continuity order this trajectory guarantees at replan boundaries (e.g. Twist == C1);
+      // std::convertible_to (rather than std::same_as) because decltype((T::continuity_order)) is
+      // "const geometry::KinematicOrder&" for a static constexpr data member, not the bare enum type
+      { T::continuity_order } -> std::convertible_to<geometry::KinematicOrder>;
+
       // calculate an entire new trajectory starting from the given state
       { variable.calculate(in_update_state, in_description) };
 

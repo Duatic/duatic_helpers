@@ -13,6 +13,7 @@
 
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>
+#include <duatic_trajectory/kinematic_trajectory_base.hpp>
 #include <duatic_trajectory/kinematic_trajectory_exponential_approach_C1.hpp>
 #include <duatic_trajectory/trajectory.hpp>
 
@@ -21,12 +22,13 @@ namespace duatic::trajectory
 
 /*
  * Exponential approach towards a goal, now additionally matching the initial acceleration too --
- * built as an *additive patch* on top of the C1 (Twist-continuity) variant, which this class
- * inherits from directly, rather than as a separate triple-pole derivation:
+ * built as an *additive patch* on top of the C1 (Twist-continuity) variant, which this class holds
+ * as a private member (c1_) rather than inheriting from, rather than as a separate triple-pole
+ * derivation:
  *
  *      x_C2(t) = x_C1(t) + h(t)
  *
- *      x_C1(t) = goal + (A + B*t) * e^(-omega_pv*t)      (term1: Base's own trajectory shape)
+ *      x_C1(t) = goal + (A + B*t) * e^(-omega_pv*t)      (term1: c1_'s own trajectory shape)
  *      h(t)    = D * t^2 * e^(-omega_a*t)                (zero position AND velocity at t=0)
  *
  *      A  = x0 - goal
@@ -53,15 +55,15 @@ namespace duatic::trajectory
  * (it never needs to know omega_a exists), omega_a second (it needs omega_pv's result):
  *
  *  - omega_pv (position+velocity+acceleration): unlike the very first cut of this class, this is
- *    NOT simply Base::determine_omega()'s velocity+t=0-jump bound reused unmodified -- that bound
- *    never sees a0, but the combined x_C2''(0) = a0 exactly regardless of omega_pv, so a large a0
- *    can *only* be reined in by shaping term1 to counteract it (there is no other free parameter at
- *    t=0). determine_omega_pv() below therefore combines Base's own velocity ceiling (identical
- *    formula/derivation to Base::determine_vel_omega(), just reimplemented here since Base keeps it
- *    private even to derived classes) with a *new* acceleration ceiling that bounds the combined
- *    trajectory's peak accel via a0 directly, then overwrites Base's omega_/B_ with the result (see
- *    calculate() below) -- Base::calculate() is still called first, purely to obtain A_ from x0 and
- *    the (Base-private) goal_, and its own provisional omega_/B_ choice is simply discarded.
+ *    NOT simply c1_'s own determine_omega()'s velocity+t=0-jump bound reused unmodified -- that
+ *    bound never sees a0, but the combined x_C2''(0) = a0 exactly regardless of omega_pv, so a
+ *    large a0 can *only* be reined in by shaping term1 to counteract it (there is no other free
+ *    parameter at t=0). determine_omega_pv() below therefore combines c1_'s own velocity ceiling
+ *    (identical formula/derivation to c1_'s determine_vel_omega(), just reimplemented here since
+ *    that stays private even to friends) with a *new* acceleration ceiling that bounds the combined
+ *    trajectory's peak accel via a0 directly, then overwrites c1_'s omega_/B_ with the result (see
+ *    calculate() below) -- c1_.calculate() is still called first, purely to obtain A_ from x0 and
+ *    the (otherwise-private) goal_, and its own provisional omega_/B_ choice is simply discarded.
  *  - omega_a (the residual correction's own decay rate): solved from how much velocity margin
  *    omega_pv's own (now a0-aware) choice leaves over -- v_max minus the *actual*, not
  *    maximum-allowed, term1 velocity peak -- once the residual a1 (now finalized) is known. Unlike
@@ -71,7 +73,7 @@ namespace duatic::trajectory
  *    omega_max as a documented best-effort approximation.
  *
  * Both determine_omega_pv() and determine_omega_a() compute a per-axis (linear/angular) candidate
- * and then combine the two axes -- omega_pv via MIN (mirroring Base::determine_omega()'s own
+ * and then combine the two axes -- omega_pv via MIN (mirroring c1_'s own determine_omega()'s own
  * lin/ang combination: the more restrictive axis governs), omega_a via MAX (the *faster* axis must
  * win here, since a slower shared omega_a would leave the other axis' own residual decaying too
  * slowly -- this is unchanged from, and was already established by, an earlier version of this
@@ -90,17 +92,36 @@ template <typename ScalarT, typename TimestampT,
   requires std::convertible_to<typename KinematicTrajectorySettingsT::ScalarType, ScalarT>
 class KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT,
                                              KinematicTrajectorySettingsT>
-  : protected KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist,
-                                                     KinematicVariableT, KinematicTrajectorySettingsT>
+  : public KinematicTrajectoryBase<KinematicTrajectorySettingsT, geometry::KinematicOrder::Accel>
 {
-public:
-  using Base = KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist,
-                                                      KinematicVariableT, KinematicTrajectorySettingsT>;
+  /*
+   * This class holds a private instance of the C1 (Twist-continuity) specialization (c1_ below) and
+   * reaches directly into its internal state (start_time_, A_, B_, omega_) rather than through
+   * public API, since it patches c1_'s own trajectory shape with an additive correction term (see
+   * the derivation above). C++ does not allow a friend declaration to name one specific
+   * specialization of a template that is itself defined only via per-ContinuityOrder specializations
+   * (there is no single specialization here to name until C1's own header has been included) -- so
+   * the whole ContinuityOrder-indexed family is friended instead, matching the primary template's
+   * own declaration in kinematic_trajectory_exponential_approach.hpp.
+   */
+  template <typename FriendScalarT, typename FriendTimestampT, geometry::KinematicOrder FriendContinuityOrder,
+            template <typename, geometry::KinematicOrder> typename FriendKinematicVariableT,
+            KinematicTrajectorySettingsExponentialApproach FriendKinematicTrajectorySettingsT>
+    requires std::convertible_to<typename FriendKinematicTrajectorySettingsT::ScalarType, FriendScalarT>
+  friend class KinematicTrajectoryExponentialApproach;
 
+public:
   using ScalarType = ScalarT;
   using TimestampType = TimestampT;
-  static constexpr geometry::KinematicOrder continuity_order = geometry::KinematicOrder::Accel;
   using KinematicTrajectorySettingsType = KinematicTrajectorySettingsT;
+
+  using Base = KinematicTrajectoryBase<KinematicTrajectorySettingsType, geometry::KinematicOrder::Accel>;
+  using Base::continuity_order;
+  using Base::settings;
+
+  // c1_'s own type (the Twist-continuity specialization of this same template family); see c1_ below.
+  using C1 = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, geometry::KinematicOrder::Twist,
+                                                    KinematicVariableT, KinematicTrajectorySettingsType>;
 
   using Self = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, continuity_order, KinematicVariableT,
                                                       KinematicTrajectorySettingsType>;
@@ -119,23 +140,17 @@ public:
 
   using TrajectoryDescriptionType = PoseType;
 
-  // Base is inherited protected (this class deliberately does NOT expose Base's calculate()/
-  // evaluate() polymorphically -- they're shadowed by this class's own, and there's no virtual
-  // dispatch here to make that safe anyway), but settings itself is still meant to be public API
-  // (e.g. traj.settings->... in tests and callers), so it's re-exposed explicitly here.
-  using Base::settings;
-
   /*
-   * settings and start_time_ are inherited from Base (public and protected respectively) rather
-   * than duplicated here: there is exactly one settings object and one start time for the whole
-   * trajectory. omega_a_ is seeded from settings->omega_min() as a well-defined default before the
-   * first calculate().
+   * settings is owned independently by Base (this class' own KinematicTrajectoryBase) and by c1_'s
+   * own Base -- both point at the *same* settings object, though, since shared_settings itself
+   * (rather than a copy of its pointee) is passed to both constructors below. omega_a_ is seeded
+   * from settings().omega_min() as a well-defined default before the first calculate().
    */
   inline explicit KinematicTrajectoryExponentialApproach(
       std::shared_ptr<KinematicTrajectorySettingsType> shared_settings)
-    : Base(shared_settings)
+    : Base(shared_settings), c1_(shared_settings)
   {
-    omega_a_ = this->settings->omega_min();
+    omega_a_ = this->settings().omega_min();
   }
 
   /*
@@ -153,23 +168,22 @@ public:
     const TwistType v0 = in_update_state.twist();
     const AccelType a0 = in_update_state.accel();
 
-    // Step 1: delegate to Base purely to obtain start_time_ and A_ = x0 - goal_ (goal_ itself stays
-    // private to Base, so this is the only way to get at A_). Base's own omega_/B_ choice here is
+    // Step 1: delegate to c1_ purely to obtain start_time_ and A_ = x0 - goal_ (goal_ itself stays
+    // private to c1_, so this is the only way to get at A_). c1_'s own omega_/B_ choice here is
     // provisional and gets overwritten by Step 2 below -- it never saw a0.
-    Base::calculate(typename Base::UpdateStateType(in_update_state.time(), in_update_state.pose(), v0), in_description);
+    c1_.calculate(typename C1::UpdateStateType(in_update_state.time(), in_update_state.pose(), v0), in_description);
 
     // Step 2: omega_pv -- solved directly from v0, A_, a0, v_max, a_max (see determine_omega_pv()),
-    // superseding Base's own provisional choice from Step 1. B_ depends on omega_, so it must be
-    // recomputed here too (identical formula to Base::calculate()'s own B_ = v0 + omega*A_).
-    this->omega_ = determine_omega_pv(v0, a0);
-    this->B_ = v0 + (this->A_ * this->omega_);
+    // superseding c1_'s own provisional choice from Step 1. B_ depends on omega_, so it must be
+    // recomputed here too (identical formula to c1_'s own calculate()'s B_ = v0 + omega*A_).
+    c1_.omega_ = determine_omega_pv(v0, a0);
+    c1_.B_ = v0 + (c1_.A_ * c1_.omega_);
 
     // Step 3: the residual acceleration term1 (at its now-final omega_pv) doesn't cover, and the
     // resulting patch amplitude. a0 and P1 (through its AccelType reinterpretation) are the same
     // order, so "-" would resolve to the diff-promoting operator (giving a Jerk) rather than a
     // same-order subtraction -- negate-and-add instead.
-    const TwistType p1 =
-        (this->A_ * (-this->omega_ * this->omega_)) + (v0 * (static_cast<ScalarType>(-2) * this->omega_));
+    const TwistType p1 = (c1_.A_ * (-c1_.omega_ * c1_.omega_)) + (v0 * (static_cast<ScalarType>(-2) * c1_.omega_));
     const AccelType a1 = a0 + (-AccelType(p1.vector()));
     D_ = TwistType(a1.vector()) * static_cast<ScalarType>(0.5);
 
@@ -191,9 +205,9 @@ public:
                           const TrajectoryDescriptionType& in_description)
   {
     // there are no future trajectory data existing to be copied
-    calculate(
-        UpdateStateType(in_timestamp, other.evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
-        in_description);
+    calculate(UpdateStateType(in_timestamp,
+                              other.template evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
+              in_description);
   }
 
   /*
@@ -214,12 +228,12 @@ public:
   template <geometry::KinematicOrder Order>
   inline void evaluate(const TimestampType& time, KinematicState<Order>& out_state) const
   {
-    // Evaluate Base directly into out_state (reusing Base's own internally-shared decay
-    // computation rather than calling Base::evaluate<>() three separate times), then add h(t)'s
-    // contribution on top in place.
-    Base::template evaluate<Order>(time, out_state);
+    // Evaluate c1_ directly into out_state (reusing c1_'s own internally-shared decay computation
+    // rather than calling c1_.evaluate<>() three separate times), then add h(t)'s contribution on
+    // top in place.
+    c1_.template evaluate<Order>(time, out_state);
 
-    const ScalarType t = (time - this->start_time_).seconds();
+    const ScalarType t = (time - c1_.start_time_).seconds();
     const ScalarType decay_a = std::exp(-omega_a_ * t);
 
     // h(t) = D * t^2 * e^(-omega_a*t): the additive correction bringing x_C1''(0) up to a0 exactly,
@@ -260,40 +274,41 @@ private:
   /*
    * One axis' ceiling on omega_pv, combining two independent bounds:
    *
-   *  - the velocity ceiling: identical formula/derivation to Base::determine_vel_omega() (Base
-   *    keeps it private even to derived classes, so it's reimplemented here rather than reused).
+   *  - the velocity ceiling: identical formula/derivation to c1_'s own determine_vel_omega() (kept
+   *    private there even to friends, so it's reimplemented here rather than reused).
    *
    *  - the acceleration ceiling: bounds the *combined* C2 trajectory's peak accel via a0 directly
-   *    (unlike Base::determine_acc_omega(), which only ever sees term1's own t=0 jump), by solving
+   *    (unlike c1_'s own determine_acc_omega(), which only ever sees term1's own t=0 jump), by
+   *    solving
    *        a_offset*(2+1/e)*omega^2 + v_zero*(4+1/e)*omega + (a_zero - a_max) = 0
    *    for the smallest nonnegative omega satisfying it. The left-hand side is non-decreasing in
    *    omega (all three coefficients are >= 0 given a_offset, v_zero >= 0), so -- exactly like every
    *    other omega-bound in this codebase -- the range's endpoints are checked first (omega_min
    *    checked first for the same "safer on an exact tie" reason as elsewhere), and only the
    *    in-between case needs the quadratic solved at all. The root itself uses the same
-   *    "rationalized" form as Base::determine_acc_omega() (multiplying by the conjugate instead of
-   *    subtracting two close values); as a bonus, unlike the naive -b+sqrt(...)/(2a) form, this one
-   *    stays well-defined as a_offset -> 0 (collapsing smoothly to the then-linear equation's own
+   *    "rationalized" form as c1_'s own determine_acc_omega() (multiplying by the conjugate instead
+   *    of subtracting two close values); as a bonus, unlike the naive -b+sqrt(...)/(2a) form, this
+   *    one stays well-defined as a_offset -> 0 (collapsing smoothly to the then-linear equation's own
    *    solution) without needing a separate branch for it.
    */
   inline ScalarType determine_omega_pv_component(const ScalarType v_max, const ScalarType a_max,
-                                                  const ScalarType v_zero, const ScalarType a_offset,
-                                                  const ScalarType a_zero) const
+                                                 const ScalarType v_zero, const ScalarType a_offset,
+                                                 const ScalarType a_zero) const
   {
     assert(v_max >= 0.0);
     assert(a_max >= 0.0);
     assert(v_zero >= 0.0);
     assert(a_offset >= 0.0);
     assert(a_zero >= 0.0);
-    assert(this->settings->omega_min() > 0.0);
-    assert(this->settings->omega_max() >= this->settings->omega_min());
+    assert(this->settings().omega_min() > 0.0);
+    assert(this->settings().omega_max() >= this->settings().omega_min());
 
     ScalarType omega_vel;
     const ScalarType v_decision = (std::numbers::e_v<ScalarType> * v_max) - v_zero;
-    if (this->settings->omega_min() * a_offset >= v_decision) {
-      omega_vel = this->settings->omega_min();
-    } else if (this->settings->omega_max() * a_offset < v_decision) {
-      omega_vel = this->settings->omega_max();
+    if (this->settings().omega_min() * a_offset >= v_decision) {
+      omega_vel = this->settings().omega_min();
+    } else if (this->settings().omega_max() * a_offset < v_decision) {
+      omega_vel = this->settings().omega_max();
     } else {
       omega_vel = v_decision / a_offset;
     }
@@ -304,8 +319,8 @@ private:
     const ScalarType c0 = a_zero - a_max;
 
     ScalarType omega_acc;
-    const ScalarType omega_min = this->settings->omega_min();
-    const ScalarType omega_max = this->settings->omega_max();
+    const ScalarType omega_min = this->settings().omega_min();
+    const ScalarType omega_max = this->settings().omega_max();
     if (((c2 * omega_min * omega_min) + (c1 * omega_min) + c0) >= static_cast<ScalarType>(0)) {
       omega_acc = omega_min;  // already violated at the bottom of the range -- best effort
     } else if (((c2 * omega_max * omega_max) + (c1 * omega_max) + c0) < static_cast<ScalarType>(0)) {
@@ -315,23 +330,23 @@ private:
           (static_cast<ScalarType>(-2) * c0) / (c1 + std::sqrt((c1 * c1) - (static_cast<ScalarType>(4) * c2 * c0)));
     }
 
-    return std::clamp(std::min(omega_vel, omega_acc), this->settings->omega_min(), this->settings->omega_max());
+    return std::clamp(std::min(omega_vel, omega_acc), this->settings().omega_min(), this->settings().omega_max());
   }
 
   /*
    * omega_pv: combines the linear and angular axes' own ceilings via MIN (the more restrictive axis
-   * governs the single shared rate), then clamps -- mirroring Base::determine_omega()'s own lin/ang
-   * combination.
+   * governs the single shared rate), then clamps -- mirroring c1_'s own determine_omega()'s own
+   * lin/ang combination.
    */
   inline ScalarType determine_omega_pv(const TwistType& v_zero, const AccelType& a_zero) const
   {
-    const ScalarType omega_lin =
-        determine_omega_pv_component(this->settings->velocity_limit_linear(), this->settings->acceleration_limit_linear(),
-                                     v_zero.linear().norm(), this->A_.linear().norm(), a_zero.linear().norm());
+    const ScalarType omega_lin = determine_omega_pv_component(
+        this->settings().velocity_limit_linear(), this->settings().acceleration_limit_linear(), v_zero.linear().norm(),
+        c1_.A_.linear().norm(), a_zero.linear().norm());
     const ScalarType omega_ang = determine_omega_pv_component(
-        this->settings->velocity_limit_angular(), this->settings->acceleration_limit_angular(),
-        v_zero.angular().norm(), this->A_.angular().norm(), a_zero.angular().norm());
-    return std::clamp(std::min(omega_lin, omega_ang), this->settings->omega_min(), this->settings->omega_max());
+        this->settings().velocity_limit_angular(), this->settings().acceleration_limit_angular(),
+        v_zero.angular().norm(), c1_.A_.angular().norm(), a_zero.angular().norm());
+    return std::clamp(std::min(omega_lin, omega_ang), this->settings().omega_min(), this->settings().omega_max());
   }
 
   /*
@@ -357,18 +372,18 @@ private:
     assert(a1_component >= 0.0);
 
     if (a1_component <= static_cast<ScalarType>(0)) {
-      return this->settings->omega_min();
+      return this->settings().omega_min();
     }
 
     const ScalarType v1_actual = std::max(v_zero, (v_zero + (omega_pv * a_offset)) / std::numbers::e_v<ScalarType>);
     const ScalarType margin = std::max(v_max - v1_actual, static_cast<ScalarType>(0));
     if (margin <= static_cast<ScalarType>(0)) {
-      return this->settings->omega_max();
+      return this->settings().omega_max();
     }
 
     const ScalarType kappa = (std::sqrt(static_cast<ScalarType>(2)) - static_cast<ScalarType>(1)) *
                              std::exp(std::sqrt(static_cast<ScalarType>(2)) - static_cast<ScalarType>(2));
-    return std::clamp(kappa * a1_component / margin, this->settings->omega_min(), this->settings->omega_max());
+    return std::clamp(kappa * a1_component / margin, this->settings().omega_min(), this->settings().omega_max());
   }
 
   /*
@@ -379,15 +394,18 @@ private:
   inline ScalarType determine_omega_a(const TwistType& v_zero, const AccelType& a1) const
   {
     const ScalarType omega_a_lin =
-        determine_omega_a_component(this->settings->velocity_limit_linear(), v_zero.linear().norm(),
-                                    this->A_.linear().norm(), this->omega_, a1.linear().norm());
+        determine_omega_a_component(this->settings().velocity_limit_linear(), v_zero.linear().norm(),
+                                    c1_.A_.linear().norm(), c1_.omega_, a1.linear().norm());
     const ScalarType omega_a_ang =
-        determine_omega_a_component(this->settings->velocity_limit_angular(), v_zero.angular().norm(),
-                                    this->A_.angular().norm(), this->omega_, a1.angular().norm());
-    return std::clamp(std::max(omega_a_lin, omega_a_ang), this->settings->omega_min(), this->settings->omega_max());
+        determine_omega_a_component(this->settings().velocity_limit_angular(), v_zero.angular().norm(),
+                                    c1_.A_.angular().norm(), c1_.omega_, a1.angular().norm());
+    return std::clamp(std::max(omega_a_lin, omega_a_ang), this->settings().omega_min(), this->settings().omega_max());
   }
 
-protected:
+  // The Twist-continuity trajectory this class patches an additive acceleration-matching correction
+  // on top of; see the derivation above. Constructed sharing the same settings object as this
+  // class' own Base (see the constructor above).
+  C1 c1_;
   TwistType D_;
   ScalarType omega_a_;
 };

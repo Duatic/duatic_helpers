@@ -81,7 +81,7 @@ SampledSpeeds sample_max_speeds(const Trajectory& traj, const double horizon_s, 
  * respects it; below that, x'(0) itself is an unavoidable floor regardless of omega (see the
  * InitialVelocityExceedingLimitDoesNotDivergeWithNonzeroAccel regression this generalizes). Per
  * the proofs document, v_max is an upper *estimate*, not an exact bound, so a modest relative
- * tolerance is allowed above whichever floor applies. traj.settings supplies the configured
+ * tolerance is allowed above whichever floor applies. traj.settings() supplies the configured
  * velocity_limit_linear()/angular(); the initial speeds aren't recoverable from traj after the
  * fact, so the caller passes them in directly.
  */
@@ -92,16 +92,16 @@ void verifyMaxVelocityInvariant(const Trajectory& traj, double initial_linear_sp
                                 double relative_tolerance = simulation_result_relative_tolerance)
 {
   const SampledSpeeds speeds = sample_max_speeds(traj, horizon_s, samples_per_second);
-  const double linear_floor = std::max(traj.settings->velocity_limit_linear(), initial_linear_speed);
-  const double angular_floor = std::max(traj.settings->velocity_limit_angular(), initial_angular_speed);
+  const double linear_floor = std::max(traj.settings().velocity_limit_linear(), initial_linear_speed);
+  const double angular_floor = std::max(traj.settings().velocity_limit_angular(), initial_angular_speed);
 
   EXPECT_LE(speeds.max_linear_speed, linear_floor * relative_tolerance)
       << "max_linear_speed=" << speeds.max_linear_speed
-      << " exceeded max(v_max_linear=" << traj.settings->velocity_limit_linear()
+      << " exceeded max(v_max_linear=" << traj.settings().velocity_limit_linear()
       << ", |v0_linear|=" << initial_linear_speed << ")";
   EXPECT_LE(speeds.max_angular_speed, angular_floor * relative_tolerance)
       << "max_angular_speed=" << speeds.max_angular_speed
-      << " exceeded max(v_max_angular=" << traj.settings->velocity_limit_angular()
+      << " exceeded max(v_max_angular=" << traj.settings().velocity_limit_angular()
       << ", |v0_angular|=" << initial_angular_speed << ")";
 }
 
@@ -151,16 +151,16 @@ void verifyMaxAccelerationInvariant(const Trajectory& traj, const rclcpp::Time& 
   const double initial_angular_accel = initial.accel().angular().norm();
 
   const SampledAccels accels = sample_max_accels(traj, horizon_s, samples_per_second);
-  const double linear_floor = std::max(traj.settings->acceleration_limit_linear(), initial_linear_accel);
-  const double angular_floor = std::max(traj.settings->acceleration_limit_angular(), initial_angular_accel);
+  const double linear_floor = std::max(traj.settings().acceleration_limit_linear(), initial_linear_accel);
+  const double angular_floor = std::max(traj.settings().acceleration_limit_angular(), initial_angular_accel);
 
   EXPECT_LE(accels.max_linear_accel, linear_floor * relative_tolerance)
       << "max_linear_accel=" << accels.max_linear_accel
-      << " exceeded max(a_max_linear=" << traj.settings->acceleration_limit_linear()
+      << " exceeded max(a_max_linear=" << traj.settings().acceleration_limit_linear()
       << ", |a0_linear|=" << initial_linear_accel << ")";
   EXPECT_LE(accels.max_angular_accel, angular_floor * relative_tolerance)
       << "max_angular_accel=" << accels.max_angular_accel
-      << " exceeded max(a_max_angular=" << traj.settings->acceleration_limit_angular()
+      << " exceeded max(a_max_angular=" << traj.settings().acceleration_limit_angular()
       << ", |a0_angular|=" << initial_angular_accel << ")";
 }
 

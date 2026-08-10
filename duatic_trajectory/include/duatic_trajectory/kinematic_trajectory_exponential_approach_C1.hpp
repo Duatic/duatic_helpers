@@ -13,6 +13,7 @@
 
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>
+#include <duatic_trajectory/kinematic_trajectory_base.hpp>
 #include <duatic_trajectory/trajectory.hpp>
 
 namespace duatic::trajectory
@@ -62,12 +63,26 @@ template <typename ScalarT, typename TimestampT,
   requires std::convertible_to<typename KinematicTrajectorySettingsT::ScalarType, ScalarT>
 class KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist, KinematicVariableT,
                                              KinematicTrajectorySettingsT>
+  : public KinematicTrajectoryBase<KinematicTrajectorySettingsT, geometry::KinematicOrder::Twist>
 {
+  /*
+   * Allow other instantiations, especially once of higher continuity order, to access this one's private members (e.g.
+   * start_time_, A_, B_) for their own calculations if they base their own calculations on this one.
+   */
+  template <typename FriendScalarT, typename FriendTimestampT, geometry::KinematicOrder FriendContinuityOrder,
+            template <typename, geometry::KinematicOrder> typename FriendKinematicVariableT,
+            KinematicTrajectorySettingsExponentialApproach FriendKinematicTrajectorySettingsT>
+    requires std::convertible_to<typename FriendKinematicTrajectorySettingsT::ScalarType, FriendScalarT>
+  friend class KinematicTrajectoryExponentialApproach;
+
 public:
   using ScalarType = ScalarT;
   using TimestampType = TimestampT;
-  static constexpr geometry::KinematicOrder continuity_order = geometry::KinematicOrder::Twist;
   using KinematicTrajectorySettingsType = KinematicTrajectorySettingsT;
+
+  using Base = KinematicTrajectoryBase<KinematicTrajectorySettingsType, geometry::KinematicOrder::Twist>;
+  using Base::continuity_order;
+  using Base::settings;
 
   using Self = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, continuity_order, KinematicVariableT,
                                                       KinematicTrajectorySettingsType>;
@@ -86,18 +101,16 @@ public:
   using TrajectoryDescriptionType = PoseType;
 
   /*
-   * settings is the sole source of truth for the velocity and omega bounds (see determine_omega()
-   * below); it is kept as a shared_ptr so it may be shared with (and updated by) other owners,
-   * but this trajectory only ever reads from it. omega_ is seeded from settings->omega_max()
-   * because, with a freshly-constructed zero offset A_, determine_omega() would compute exactly
-   * that value anyway (see the attached mathematical proof).
+   * settings (the velocity and omega bounds read by determine_omega() below) is owned by Base; only
+   * omega_ itself is initialized here. It is seeded from this->settings().omega_max() because, with a
+   * freshly-constructed zero offset A_, determine_omega() would compute exactly that value anyway
+   * (see the attached mathematical proof).
    */
   inline explicit KinematicTrajectoryExponentialApproach(
       std::shared_ptr<KinematicTrajectorySettingsType> shared_settings)
-    : settings(std::move(shared_settings))
+    : Base(std::move(shared_settings))
   {
-    assert(settings != nullptr && "Given shared settings don't exist");
-    omega_ = settings->omega_min();
+    omega_ = this->settings().omega_min();
   }
 
   /*
@@ -132,9 +145,9 @@ public:
                           const TrajectoryDescriptionType& in_description)
   {
     // there are no future trajectory data existing to be copied
-    calculate(
-        UpdateStateType(in_timestamp, other.evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
-        in_description);
+    calculate(UpdateStateType(in_timestamp,
+                              other.template evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
+              in_description);
   }
 
   /*
@@ -190,24 +203,24 @@ private:
    */
   inline ScalarType determine_omega(const TwistType& v_zero) const
   {
-    assert(settings->velocity_limit_linear() >= 0.0);
-    assert(settings->velocity_limit_angular() >= 0.0);
-    assert(settings->acceleration_limit_linear() >= 0.0);
-    assert(settings->acceleration_limit_angular() >= 0.0);
+    assert(this->settings().velocity_limit_linear() >= 0.0);
+    assert(this->settings().velocity_limit_angular() >= 0.0);
+    assert(this->settings().acceleration_limit_linear() >= 0.0);
+    assert(this->settings().acceleration_limit_angular() >= 0.0);
 
-    const ScalarType omega_lin =
-        std::min(determine_vel_omega(settings->velocity_limit_linear(), v_zero.linear().norm(), A_.linear().norm()),
-                 determine_acc_omega(settings->acceleration_limit_linear(), settings->velocity_limit_linear(),
-                                     v_zero.linear().norm(), A_.linear().norm()));
-    const ScalarType omega_ang =
-        std::min(determine_vel_omega(settings->velocity_limit_angular(), v_zero.angular().norm(), A_.angular().norm()),
-                 determine_acc_omega(settings->acceleration_limit_angular(), settings->velocity_limit_angular(),
-                                     v_zero.angular().norm(), A_.angular().norm()));
+    const ScalarType omega_lin = std::min(
+        determine_vel_omega(this->settings().velocity_limit_linear(), v_zero.linear().norm(), A_.linear().norm()),
+        determine_acc_omega(this->settings().acceleration_limit_linear(), this->settings().velocity_limit_linear(),
+                            v_zero.linear().norm(), A_.linear().norm()));
+    const ScalarType omega_ang = std::min(
+        determine_vel_omega(this->settings().velocity_limit_angular(), v_zero.angular().norm(), A_.angular().norm()),
+        determine_acc_omega(this->settings().acceleration_limit_angular(), this->settings().velocity_limit_angular(),
+                            v_zero.angular().norm(), A_.angular().norm()));
 
     // Both determine_vel_omega() and determine_acc_omega() already return values within
     // [omega_min, omega_max]; clamp again here regardless, so this stays true even if either helper's
     // assumptions are violated (e.g. a structurally infeasible acceleration limit).
-    return std::clamp(std::min(omega_lin, omega_ang), settings->omega_min(), settings->omega_max());
+    return std::clamp(std::min(omega_lin, omega_ang), this->settings().omega_min(), this->settings().omega_max());
   }
 
   inline ScalarType determine_vel_omega(const ScalarType v_max, const ScalarType v_zero, const ScalarType a) const
@@ -215,14 +228,14 @@ private:
     assert(v_max >= 0.0);
     assert(v_zero >= 0.0);
     assert(a >= 0.0);
-    assert(settings->omega_min() > 0.0);
-    assert(settings->omega_max() >= settings->omega_min());
+    assert(this->settings().omega_min() > 0.0);
+    assert(this->settings().omega_max() >= this->settings().omega_min());
 
     const ScalarType v_descision = (std::numbers::e_v<ScalarType> * v_max) - v_zero;
-    if (settings->omega_min() * a >= v_descision) {
-      return settings->omega_min();
-    } else if (settings->omega_max() * a < v_descision) {
-      return settings->omega_max();
+    if (this->settings().omega_min() * a >= v_descision) {
+      return this->settings().omega_min();
+    } else if (this->settings().omega_max() * a < v_descision) {
+      return this->settings().omega_max();
     } else {
       return v_descision / a;
     }
@@ -246,8 +259,8 @@ private:
     assert(v_max >= 0.0);
     assert(v_zero >= 0.0);
     assert(a >= 0.0);
-    assert(settings->omega_min() > 0.0);
-    assert(settings->omega_max() >= settings->omega_min());
+    assert(this->settings().omega_min() > 0.0);
+    assert(this->settings().omega_max() >= this->settings().omega_min());
 
     // |x''(0)| <= a_max  <=>  omega^2 * a + 2 * omega * v_zero <= a_max (worst-case diverging B). The
     // left-hand side is non-decreasing in omega (a, v_zero >= 0), so -- exactly like
@@ -256,14 +269,14 @@ private:
     // first so that an exact tie (both endpoint conditions true at once, e.g. a == v_zero ==
     // a_max == 0) resolves to the safer, more restrictive omega_min rather than omega_max.
     ScalarType omega_zero;
-    if (((settings->omega_min() * settings->omega_min()) * a) +
-            (static_cast<ScalarType>(2) * settings->omega_min() * v_zero) >=
+    if (((this->settings().omega_min() * this->settings().omega_min()) * a) +
+            (static_cast<ScalarType>(2) * this->settings().omega_min() * v_zero) >=
         a_max) {
-      omega_zero = settings->omega_min();  // already violated at the bottom of the range -- best effort
-    } else if (((settings->omega_max() * settings->omega_max()) * a) +
-                   (static_cast<ScalarType>(2) * settings->omega_max() * v_zero) <
+      omega_zero = this->settings().omega_min();  // already violated at the bottom of the range -- best effort
+    } else if (((this->settings().omega_max() * this->settings().omega_max()) * a) +
+                   (static_cast<ScalarType>(2) * this->settings().omega_max() * v_zero) <
                a_max) {
-      omega_zero = settings->omega_max();  // unconstrained even at the top of the range
+      omega_zero = this->settings().omega_max();  // unconstrained even at the top of the range
     } else {
       // Rationalized form of the usual (-v_zero + sqrt(v_zero^2 + a*a_max)) / a: multiplying by its
       // conjugate avoids subtracting two close values, and stays well-defined as a -> 0 (-> a_max /
@@ -278,10 +291,10 @@ private:
     // for the same tie-break reason as omega_zero above.
     const ScalarType a_decision = std::numbers::e_v<ScalarType> * a_max;
     ScalarType omega_interior;
-    if (settings->omega_min() * v_max >= a_decision) {
-      omega_interior = settings->omega_min();
-    } else if (settings->omega_max() * v_max < a_decision) {
-      omega_interior = settings->omega_max();
+    if (this->settings().omega_min() * v_max >= a_decision) {
+      omega_interior = this->settings().omega_min();
+    } else if (this->settings().omega_max() * v_max < a_decision) {
+      omega_interior = this->settings().omega_max();
     } else {
       omega_interior = a_decision / v_max;
     }
@@ -290,10 +303,7 @@ private:
     return std::min(omega_zero, omega_interior);
   }
 
-public:
-  std::shared_ptr<KinematicTrajectorySettingsType> settings;
-
-protected:
+private:
   TimestampType start_time_;
   PoseType goal_;
   TwistType A_, B_;
