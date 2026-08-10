@@ -318,6 +318,7 @@ def _solve_ik_multi(
         _limit_margin_cost(
             robot,
             JointVar(0),
+            joint_mask,  # unbatched: bound to JointVar(0), not the batched pose var
             margin=limit_margin,
             weight=limit_margin_weight,
         ),
