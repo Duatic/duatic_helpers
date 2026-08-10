@@ -44,8 +44,8 @@ struct KinematicTrajectorySettingsDefault
   ScalarType v_max_lin_{ 0.1 };                                   // default linear speed limit is 0.1 m/s
   ScalarType v_max_ang_{ 2.0 * std::numbers::pi_v<ScalarType> };  // default angular speed limit is 1 rev/s
 
-  ScalarType a_max_lin_{ v_max_lin_ / 1.0 };  // default linear acceleration limit is max speed / 1s
-  ScalarType a_max_ang_{ v_max_ang_ / 1.0 };  // default angular acceleration limit is max speed / 1s
+  ScalarType a_max_lin_{ v_max_lin_ / 0.1 };  // default linear acceleration limit is max speed / 0.1s
+  ScalarType a_max_ang_{ v_max_ang_ / 0.1 };  // default angular acceleration limit is max speed / 0.1s
 
   inline ScalarType velocity_limit_linear() const
   {

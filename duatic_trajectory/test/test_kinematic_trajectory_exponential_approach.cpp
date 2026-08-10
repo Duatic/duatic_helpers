@@ -11,13 +11,7 @@ namespace duatic::trajectory
 namespace
 {
 
-// C2's omega_pv now folds in a worst-case allowance for its own residual-acceleration patch (see
-// determine_omega_pv_component() in kinematic_trajectory_exponential_approach_C2.hpp), so it
-// converges measurably slower than C1 given identical v0/goal/settings, even when a0=0 -- 120s used
-// to be enough margin for every convergence_settings_profiles entry below (C1 only), but the
-// "moderate" and "generous" profiles now need closer to 180s for C2. 250s keeps a comfortable
-// margin for both continuity orders without materially slowing the test suite down.
-constexpr double convergence_horizon_seconds = 250.0;
+constexpr double convergence_horizon_seconds = 150.0;
 constexpr uint number_of_simulations = 1000;
 constexpr double simulation_horizon_seconds = 90.0;
 constexpr double simulation_samples_per_second = 1000.0;

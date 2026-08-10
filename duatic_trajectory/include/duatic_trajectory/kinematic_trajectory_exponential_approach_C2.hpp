@@ -54,37 +54,6 @@ namespace duatic::trajectory
  * Two independent convergence rates, solved in a strict one-directional order -- omega_pv first
  * (it never needs to know omega_a exists), omega_a second (it needs omega_pv's result):
  *
- *  - omega_pv (position+velocity+acceleration): unlike the very first cut of this class, this is
- *    NOT simply c1_'s own determine_omega()'s velocity+t=0-jump bound reused unmodified -- that
- *    bound never sees a0, but the combined x_C2''(0) = a0 exactly regardless of omega_pv, so a
- *    large a0 can *only* be reined in by shaping term1 to counteract it (there is no other free
- *    parameter at t=0). determine_omega_pv() below therefore combines c1_'s own velocity ceiling
- *    (identical formula/derivation to c1_'s determine_vel_omega(), just reimplemented here since
- *    that stays private even to friends) with a *new* acceleration ceiling that bounds the combined
- *    trajectory's peak accel via a0 directly, then overwrites c1_'s omega_/B_ with the result (see
- *    calculate() below) -- c1_.calculate() is still called first, purely to obtain A_ from x0 and
- *    the (otherwise-private) goal_, and its own provisional omega_/B_ choice is simply discarded.
- *  - omega_a (the residual correction's own decay rate): solved from how much velocity margin
- *    omega_pv's own (now a0-aware) choice leaves over -- v_max minus the *actual*, not
- *    maximum-allowed, term1 velocity peak -- once the residual a1 (now finalized) is known. Unlike
- *    an earlier version of this function, this is a pure closed form: no retry/backoff search over
- *    omega_pv. If the margin runs out entirely (e.g. an axis' own v0 already exceeds its v_max
- *    outright, so no choice of omega_pv could ever have reopened it), omega_a simply falls back to
- *    omega_max as a documented best-effort approximation.
- *
- * Both determine_omega_pv() and determine_omega_a() compute a per-axis (linear/angular) candidate
- * and then combine the two axes -- omega_pv via MIN (mirroring c1_'s own determine_omega()'s own
- * lin/ang combination: the more restrictive axis governs), omega_a via MAX (the *faster* axis must
- * win here, since a slower shared omega_a would leave the other axis' own residual decaying too
- * slowly -- this is unchanged from, and was already established by, an earlier version of this
- * class; the axis-combination direction isn't spelled out by the scalar derivation these two
- * functions otherwise follow).
- *
- * Deliberate deviations from a strict reading of the underlying derivation:
- *  - No hard "INFEASIBLE" rejection when v_max <= |v0| or a_max <= |a0|: both omega ceilings above
- *    degrade gracefully to their best-effort endpoint (omega_min or omega_max, whichever is safer)
- *    instead, consistent with every other limit in this codebase (see e.g.
- *    kinematic_trajectory_exponential_approach_C1.hpp's own "Approximate V-/A-Limit" philosophy).
  */
 template <typename ScalarT, typename TimestampT,
           template <typename, geometry::KinematicOrder> typename KinematicVariableT,
@@ -272,68 +241,6 @@ public:
 
 private:
   /*
-   * One axis' ceiling on omega_pv, combining two independent bounds:
-   *
-   *  - the velocity ceiling: identical formula/derivation to c1_'s own determine_vel_omega() (kept
-   *    private there even to friends, so it's reimplemented here rather than reused).
-   *
-   *  - the acceleration ceiling: bounds the *combined* C2 trajectory's peak accel via a0 directly
-   *    (unlike c1_'s own determine_acc_omega(), which only ever sees term1's own t=0 jump), by
-   *    solving
-   *        a_offset*(2+1/e)*omega^2 + v_zero*(4+1/e)*omega + (a_zero - a_max) = 0
-   *    for the smallest nonnegative omega satisfying it. The left-hand side is non-decreasing in
-   *    omega (all three coefficients are >= 0 given a_offset, v_zero >= 0), so -- exactly like every
-   *    other omega-bound in this codebase -- the range's endpoints are checked first (omega_min
-   *    checked first for the same "safer on an exact tie" reason as elsewhere), and only the
-   *    in-between case needs the quadratic solved at all. The root itself uses the same
-   *    "rationalized" form as c1_'s own determine_acc_omega() (multiplying by the conjugate instead
-   *    of subtracting two close values); as a bonus, unlike the naive -b+sqrt(...)/(2a) form, this
-   *    one stays well-defined as a_offset -> 0 (collapsing smoothly to the then-linear equation's own
-   *    solution) without needing a separate branch for it.
-   */
-  inline ScalarType determine_omega_pv_component(const ScalarType v_max, const ScalarType a_max,
-                                                 const ScalarType v_zero, const ScalarType a_offset,
-                                                 const ScalarType a_zero) const
-  {
-    assert(v_max >= 0.0);
-    assert(a_max >= 0.0);
-    assert(v_zero >= 0.0);
-    assert(a_offset >= 0.0);
-    assert(a_zero >= 0.0);
-    assert(this->settings().omega_min() > 0.0);
-    assert(this->settings().omega_max() >= this->settings().omega_min());
-
-    ScalarType omega_vel;
-    const ScalarType v_decision = (std::numbers::e_v<ScalarType> * v_max) - v_zero;
-    if (this->settings().omega_min() * a_offset >= v_decision) {
-      omega_vel = this->settings().omega_min();
-    } else if (this->settings().omega_max() * a_offset < v_decision) {
-      omega_vel = this->settings().omega_max();
-    } else {
-      omega_vel = v_decision / a_offset;
-    }
-
-    const ScalarType inv_e = static_cast<ScalarType>(1) / std::numbers::e_v<ScalarType>;
-    const ScalarType c2 = a_offset * (static_cast<ScalarType>(2) + inv_e);
-    const ScalarType c1 = v_zero * (static_cast<ScalarType>(4) + inv_e);
-    const ScalarType c0 = a_zero - a_max;
-
-    ScalarType omega_acc;
-    const ScalarType omega_min = this->settings().omega_min();
-    const ScalarType omega_max = this->settings().omega_max();
-    if (((c2 * omega_min * omega_min) + (c1 * omega_min) + c0) >= static_cast<ScalarType>(0)) {
-      omega_acc = omega_min;  // already violated at the bottom of the range -- best effort
-    } else if (((c2 * omega_max * omega_max) + (c1 * omega_max) + c0) < static_cast<ScalarType>(0)) {
-      omega_acc = omega_max;  // unconstrained even at the top of the range
-    } else {
-      omega_acc =
-          (static_cast<ScalarType>(-2) * c0) / (c1 + std::sqrt((c1 * c1) - (static_cast<ScalarType>(4) * c2 * c0)));
-    }
-
-    return std::clamp(std::min(omega_vel, omega_acc), this->settings().omega_min(), this->settings().omega_max());
-  }
-
-  /*
    * omega_pv: combines the linear and angular axes' own ceilings via MIN (the more restrictive axis
    * governs the single shared rate), then clamps -- mirroring c1_'s own determine_omega()'s own
    * lin/ang combination.
@@ -346,24 +253,138 @@ private:
     const ScalarType omega_ang = determine_omega_pv_component(
         this->settings().velocity_limit_angular(), this->settings().acceleration_limit_angular(),
         v_zero.angular().norm(), c1_.A_.angular().norm(), a_zero.angular().norm());
-    return std::clamp(std::min(omega_lin, omega_ang), this->settings().omega_min(), this->settings().omega_max());
+    return std::min(omega_lin, omega_ang);
   }
 
   /*
-   * One axis' candidate omega_a: sized so the residual h(t) decays away within roughly the velocity
-   * margin omega_pv's (now a0-aware) choice left over -- v_max minus the *actual* peak speed term1
-   * reaches (not the maximum it's merely allowed to reach). No residual on this axis (a1_component
-   * <= 0) places no constraint on omega_a at all, so that's trivially omega_min -- the non-binding
-   * choice for the MAX combination in determine_omega_a() below (omega_min can never win a max()
-   * against a genuine, larger need from the other axis). Otherwise, if the margin has run out
-   * entirely (e.g. this axis' own v0 already exceeds its v_max outright, pinning the margin at 0
-   * regardless of omega_pv), there is no search left to do -- omega_a simply falls back to omega_max
-   * as a documented best-effort approximation, rather than iteratively re-shrinking omega_pv the way
-   * an earlier version of this function did.
+   * One axis' ceiling on omega_pv, combining two independent bounds -- mirroring c1_'s own
+   * determine_omega()'s min-of-(vel,acc) combination, just with the two bounds split out into their
+   * own named functions below (determine_vel_omega_pv()/determine_acc_omega_pv()) exactly as c1_
+   * does with its own determine_vel_omega()/determine_acc_omega().
    */
-  inline ScalarType determine_omega_a_component(const ScalarType v_max, const ScalarType v_zero,
+  inline ScalarType determine_omega_pv_component(const ScalarType v_max, const ScalarType a_max,
+                                                 const ScalarType v_zero, const ScalarType a_offset,
+                                                 const ScalarType a_zero) const
+  {
+    return std::clamp(std::min(determine_vel_omega_pv(v_max, v_zero, a_offset),
+                               determine_acc_omega_pv(a_max, v_max, v_zero, a_offset, a_zero)),
+                      this->settings().omega_min(), this->settings().omega_max());
+  }
+
+  /*
+   * The velocity ceiling on omega_pv: delegates to c1_'s own determine_vel_omega() directly rather
+   * than reimplementing the same formula independently -- the family-wide friend declaration in
+   * kinematic_trajectory_exponential_approach_C1.hpp makes c1_'s private member functions accessible
+   * here, so there is no reason to keep a second, hand-mirrored copy that could drift out of sync.
+   */
+  inline ScalarType determine_vel_omega_pv(const ScalarType v_max, const ScalarType v_zero,
+                                           const ScalarType a_offset) const
+  {
+    return c1_.determine_vel_omega(v_max, v_zero, a_offset);
+  }
+
+  /*
+   * The acceleration ceiling on omega_pv: bounds the *combined* C2 trajectory's peak accel via a0
+   * directly (unlike c1_'s own determine_acc_omega(), which only ever sees term1's own t=0 jump), by
+   * solving
+   *     a_offset*(2+1/e)*omega^2 + v_zero*(4+1/e)*omega + (a_zero - a_max) = 0
+   * for the smallest nonnegative omega satisfying it. The left-hand side is non-decreasing in omega
+   * (all three coefficients are >= 0 given a_offset, v_zero >= 0), so -- exactly like every other
+   * omega-bound in this codebase -- the range's endpoints are checked first (omega_min checked first
+   * for the same "safer on an exact tie" reason as elsewhere), and only the in-between case needs the
+   * quadratic solved at all. The root itself uses the same "rationalized" form as c1_'s own
+   * determine_acc_omega() (multiplying by the conjugate instead of subtracting two close values); as
+   * a bonus, unlike the naive -b+sqrt(...)/(2a) form, this one stays well-defined as a_offset -> 0
+   * (collapsing smoothly to the then-linear equation's own solution) without needing a separate
+   * branch for it.
+   *
+   * v_max is unused by this formula (unlike c1_'s own determine_acc_omega(), whose "interior extremum"
+   * bound does need it) -- kept in the signature purely so this still lines up parameter-for-parameter
+   * with determine_vel_omega_pv() at each call site in determine_omega_pv_component() below.
+   */
+  inline ScalarType determine_acc_omega_pv(const ScalarType a_max, [[maybe_unused]] const ScalarType v_max,
+                                           const ScalarType v_zero, const ScalarType a_offset,
+                                           const ScalarType a_zero) const
+  {
+    assert(a_max >= 0.0);
+    assert(v_max >= 0.0);
+    assert(v_zero >= 0.0);
+    assert(a_offset >= 0.0);
+    assert(a_zero >= 0.0);
+    assert(this->settings().omega_min() > 0.0);
+    assert(this->settings().omega_max() >= this->settings().omega_min());
+
+    const ScalarType inv_e = static_cast<ScalarType>(1) / std::numbers::e_v<ScalarType>;
+    const ScalarType c2 = a_offset * (static_cast<ScalarType>(2) + inv_e);
+    const ScalarType c1 = v_zero * (static_cast<ScalarType>(4) + inv_e);
+    const ScalarType c0 = a_zero - a_max;
+
+    const ScalarType omega_min = this->settings().omega_min();
+    const ScalarType omega_max = this->settings().omega_max();
+    if (((c2 * omega_min * omega_min) + (c1 * omega_min) + c0) >= static_cast<ScalarType>(0)) {
+      return omega_min;  // already violated at the bottom of the range -- best effort
+    } else if (((c2 * omega_max * omega_max) + (c1 * omega_max) + c0) < static_cast<ScalarType>(0)) {
+      return omega_max;  // unconstrained even at the top of the range
+    } else {
+      return (static_cast<ScalarType>(-2) * c0) / (c1 + std::sqrt((c1 * c1) - (static_cast<ScalarType>(4) * c2 * c0)));
+    }
+  }
+
+  /*
+   * omega_a: combines the linear and angular axes' own candidates via MAX -- the *faster* axis must
+   * win, since a shared omega_a slower than what either axis' own residual needs would leave that
+   * axis decaying too slowly (unlike omega_pv, where the more restrictive/slower axis governs).
+   */
+  inline ScalarType determine_omega_a(const TwistType& v_zero, const AccelType& a1) const
+  {
+    const ScalarType omega_a_lin = determine_omega_a_component(
+        this->settings().velocity_limit_linear(), this->settings().acceleration_limit_linear(), v_zero.linear().norm(),
+        c1_.A_.linear().norm(), c1_.omega_, a1.linear().norm());
+    const ScalarType omega_a_ang = determine_omega_a_component(
+        this->settings().velocity_limit_angular(), this->settings().acceleration_limit_angular(),
+        v_zero.angular().norm(), c1_.A_.angular().norm(), c1_.omega_, a1.angular().norm());
+    return std::clamp(std::max(omega_a_lin, omega_a_ang), this->settings().omega_min(), this->settings().omega_max());
+  }
+
+  /*
+   * One axis' ceiling on omega_a, mirroring determine_omega_pv_component()'s min-of-(vel,acc)
+   * structure -- split into determine_vel_omega_a()/determine_acc_omega_a() below.
+   */
+  inline ScalarType determine_omega_a_component(const ScalarType v_max, const ScalarType a_max, const ScalarType v_zero,
                                                 const ScalarType a_offset, const ScalarType omega_pv,
                                                 const ScalarType a1_component) const
+  {
+    return std::clamp(std::min(determine_vel_omega_a(v_max, v_zero, a_offset, omega_pv, a1_component),
+                               determine_acc_omega_a(a_max, a1_component)),
+                      this->settings().omega_min(), this->settings().omega_max());
+  }
+
+  /*
+   * The velocity ceiling on omega_a -- fixed to actually be a ceiling (the *maximum* omega_a that
+   * keeps h(t)'s residual velocity contribution within the leftover margin), rather than the
+   * `kappa*a1_component/margin` value an earlier version of this function returned. That value is
+   * the *minimum* sufficient omega_a: h'(t)'s peak magnitude is `kappa*a1_component/omega_a`, strictly
+   * *decreasing* in omega_a (D = a1_component/2 is fixed, independent of omega_a -- omega_a only
+   * controls how fast the correction decays), so any omega_a at or above that threshold already
+   * satisfies the margin, and the *largest* available one (omega_max, if reachable) satisfies it with
+   * the most room to spare while *also* minimizing h(t)'s own position-overshoot peak (which shrinks
+   * even faster, as 1/omega_a^2) -- see kinematic_trajectory_exponential_approach_C2.hpp's own
+   * derivation notes above for why maximizing, not minimizing, omega_a is what actually avoids
+   * overshoot. No residual on this axis (a1_component <= 0) places no constraint on omega_a at all,
+   * so that case is trivially omega_min -- the non-binding choice for the MAX combination in
+   * determine_omega_a() above (omega_min can never win a max() against a genuine, larger need from
+   * the other axis).
+   *
+   * v_max, v_zero, a_offset and omega_pv are all unused by this formula now that it no longer needs
+   * to locate a margin-dependent threshold -- kept in the signature purely so this still lines up
+   * parameter-for-parameter with determine_vel_omega_pv()/determine_acc_omega_pv() at the call sites
+   * in determine_omega_a_component() below.
+   */
+  inline ScalarType determine_vel_omega_a([[maybe_unused]] const ScalarType v_max,
+                                          [[maybe_unused]] const ScalarType v_zero,
+                                          [[maybe_unused]] const ScalarType a_offset,
+                                          [[maybe_unused]] const ScalarType omega_pv,
+                                          const ScalarType a1_component) const
   {
     assert(v_max >= 0.0);
     assert(v_zero >= 0.0);
@@ -374,32 +395,32 @@ private:
     if (a1_component <= static_cast<ScalarType>(0)) {
       return this->settings().omega_min();
     }
-
-    const ScalarType v1_actual = std::max(v_zero, (v_zero + (omega_pv * a_offset)) / std::numbers::e_v<ScalarType>);
-    const ScalarType margin = std::max(v_max - v1_actual, static_cast<ScalarType>(0));
-    if (margin <= static_cast<ScalarType>(0)) {
-      return this->settings().omega_max();
-    }
-
-    const ScalarType kappa = (std::sqrt(static_cast<ScalarType>(2)) - static_cast<ScalarType>(1)) *
-                             std::exp(std::sqrt(static_cast<ScalarType>(2)) - static_cast<ScalarType>(2));
-    return std::clamp(kappa * a1_component / margin, this->settings().omega_min(), this->settings().omega_max());
+    return this->settings().omega_max();
   }
 
   /*
-   * omega_a: combines the linear and angular axes' own candidates via MAX -- the *faster* axis must
-   * win, since a shared omega_a slower than what either axis' own residual needs would leave that
-   * axis decaying too slowly (unlike omega_pv, where the more restrictive/slower axis governs).
+   * The acceleration ceiling on omega_a: unlike omega_pv's own acceleration ceiling, this one never
+   * actually constrains anything, for a structural reason worth spelling out rather than silently
+   * omitting. h(t) = D*t^2*e^(-omega_a*t) has h''(t) = D*(2-4*omega_a*t+omega_a^2*t^2)*e^(-omega_a*t);
+   * substituting u = omega_a*t collapses this to D*(2-4u+u^2)*e^(-u), a function of the dimensionless
+   * u *alone* -- omega_a cancels out completely, so h''(t)'s peak magnitude over all t is a fixed
+   * multiple of D (attained, in fact, exactly at t=0, where it equals a1_component by construction --
+   * that's the whole point of D), regardless of omega_a. omega_a only reshapes *when* that peak
+   * occurs, never how large it is: raising omega_a shrinks h(t)'s position and velocity peaks (see
+   * determine_vel_omega_a() above) but leaves the acceleration peak exactly where it started. So
+   * there is no omega_a this function could return to bring an over-limit a1_component back into
+   * range -- that would have to come from reshaping a1_component itself (i.e. omega_pv, A_, or the
+   * requested a0), not from omega_a -- and this always returns the same, non-binding omega_max.
+   *
+   * Both parameters are consequently unused -- kept purely so this still lines up parameter-for-
+   * parameter with determine_acc_omega_pv() at its call site in determine_omega_a_component() below.
    */
-  inline ScalarType determine_omega_a(const TwistType& v_zero, const AccelType& a1) const
+  inline ScalarType determine_acc_omega_a([[maybe_unused]] const ScalarType a_max,
+                                          [[maybe_unused]] const ScalarType a1_component) const
   {
-    const ScalarType omega_a_lin =
-        determine_omega_a_component(this->settings().velocity_limit_linear(), v_zero.linear().norm(),
-                                    c1_.A_.linear().norm(), c1_.omega_, a1.linear().norm());
-    const ScalarType omega_a_ang =
-        determine_omega_a_component(this->settings().velocity_limit_angular(), v_zero.angular().norm(),
-                                    c1_.A_.angular().norm(), c1_.omega_, a1.angular().norm());
-    return std::clamp(std::max(omega_a_lin, omega_a_ang), this->settings().omega_min(), this->settings().omega_max());
+    assert(a_max >= 0.0);
+    assert(a1_component >= 0.0);
+    return this->settings().omega_max();
   }
 
   // The Twist-continuity trajectory this class patches an additive acceleration-matching correction
