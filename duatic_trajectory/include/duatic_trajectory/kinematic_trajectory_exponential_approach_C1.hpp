@@ -293,11 +293,11 @@ private:
 public:
   std::shared_ptr<KinematicTrajectorySettingsType> settings;
 
-private:
-  ScalarType omega_;
+protected:
   TimestampType start_time_;
   PoseType goal_;
   TwistType A_, B_;
+  ScalarType omega_;
 };
 
 }  // namespace duatic::trajectory

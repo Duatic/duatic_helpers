@@ -97,10 +97,8 @@ struct KinematicTrajectorySettingsDefault
   }
 };
 
-static_assert(KinematicTrajectorySettings<KinematicTrajectorySettingsDefault<double>>, "KinematicTrajectorySettingsDefa"
-                                                                                       "ult must satisfy the "
-                                                                                       "KinematicTrajectorySettings "
-                                                                                       "concept.");
+static_assert(KinematicTrajectorySettings<KinematicTrajectorySettingsDefault<double>>,  //
+              "KinematicTrajectorySettingsDefault must satisfy the KinematicTrajectorySettings concept.");
 
 template <typename T>
 concept KinematicTrajectory =

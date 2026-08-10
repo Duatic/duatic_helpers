@@ -11,7 +11,13 @@ namespace duatic::trajectory
 namespace
 {
 
-constexpr double convergence_horizon_seconds = 120.0;
+// C2's omega_pv now folds in a worst-case allowance for its own residual-acceleration patch (see
+// determine_omega_pv_component() in kinematic_trajectory_exponential_approach_C2.hpp), so it
+// converges measurably slower than C1 given identical v0/goal/settings, even when a0=0 -- 120s used
+// to be enough margin for every convergence_settings_profiles entry below (C1 only), but the
+// "moderate" and "generous" profiles now need closer to 180s for C2. 250s keeps a comfortable
+// margin for both continuity orders without materially slowing the test suite down.
+constexpr double convergence_horizon_seconds = 250.0;
 constexpr uint number_of_simulations = 1000;
 constexpr double simulation_horizon_seconds = 90.0;
 constexpr double simulation_samples_per_second = 1000.0;
@@ -127,10 +133,12 @@ SampledAccels sample_max_accels(const Trajectory& traj, const double horizon_s, 
  * Verifies the "Approximate A-Limit" invariant (see determine_acc_omega() in
  * kinematic_trajectory_exponential_approach_C1.hpp) against an already-calculate()'d trajectory:
  * the peak sampled acceleration must stay close to max(configured limit, the trajectory's own
- * initial acceleration) -- mirroring verifyMaxVelocityInvariant()'s v0 floor above. Unlike v0,
- * though, the initial acceleration isn't a raw external input C1 has to tolerate (C1 has no
- * acceleration continuity to match) -- it's a consequence of the omega determine_acc_omega() itself
- * chose, so the floor is measured directly from the trajectory rather than passed in by the caller.
+ * initial acceleration) -- mirroring verifyMaxVelocityInvariant()'s v0 floor above. Unlike that
+ * floor, though, the initial acceleration doesn't need to be passed in by the caller: for C1 it's
+ * simply a consequence of the omega determine_acc_omega() chose (C1 has no acceleration continuity
+ * to match), and for C2 it's the a0 the caller supplied, matched exactly by construction (see
+ * kinematic_trajectory_exponential_approach_C2.hpp) -- either way, evaluate<Accel>(start_time)
+ * recovers it directly, so this works unchanged for both.
  */
 template <typename Trajectory>
 void verifyMaxAccelerationInvariant(const Trajectory& traj, const rclcpp::Time& start_time,
@@ -651,20 +659,22 @@ TYPED_TEST(KinematicTrajectoryExponentialApproachTest, RandomTrajectoriesRespect
 }
 
 /*
- * C1-specific: determine_acc_omega()'s acceleration-limit merge (see
- * kinematic_trajectory_exponential_approach_C1.hpp) only exists on the C1 variant so far -- C2
- * doesn't fold an acceleration limit into its own omega selection yet -- so these mirror
- * KnownExamplesRespectVelocityLimit/RandomTrajectoriesRespectVelocityLimit above directly against
- * ExponentialApproachPose3DC1d rather than via the shared TYPED_TEST fixture.
+ * Simulation tests: densely sample evaluate() across the whole approach and verify the
+ * "Approximate A-Limit" invariant (see verifyMaxAccelerationInvariant() above and the proofs
+ * document) holds -- run against every continuity order in TrajectoryTypes via the shared fixture,
+ * exactly mirroring KnownExamplesRespectVelocityLimit/RandomTrajectoriesRespectVelocityLimit above.
+ * makeUpdateState() drops the initial acceleration for C1 (no matching continuity order there), so
+ * passing a nonzero a0 collapses to the ordinary a0=0 case for C1 while genuinely exercising C2's
+ * a0-matching/omega_a machinery under the very same invariant check.
  */
-TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationLimit)
+TYPED_TEST(KinematicTrajectoryExponentialApproachTest, KnownExamplesRespectAccelerationLimit)
 {
-  using Trajectory = ExponentialApproachPose3DC1d;
+  using Trajectory = TypeParam;
   const rclcpp::Time start_time(0, 0);
 
   {
     SCOPED_TRACE("pure linear displacement from rest");
-    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
     ASSERT_TRUE(settings->set_acceleration_limits(0.2, 0.4));
     ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
@@ -685,7 +695,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
 
   {
     SCOPED_TRACE("pure rotation from rest");
-    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.5, 1.0));
     ASSERT_TRUE(settings->set_acceleration_limits(0.2, 0.4));
     ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
@@ -707,7 +717,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
 
   {
     SCOPED_TRACE("combined linear and angular displacement from rest");
-    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(0.4, 0.8));
     ASSERT_TRUE(settings->set_acceleration_limits(0.15, 0.3));
     ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
@@ -733,7 +743,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
   // enough to write down here -- so this no longer reaches that particular regime.
   for (const double a_max : { 0.05, 0.1, 0.5 }) {
     SCOPED_TRACE(::testing::Message() << "large offset, a_max=" << a_max);
-    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     ASSERT_TRUE(settings->set_velocity_limits(1000.0, 1000.0));
     ASSERT_TRUE(settings->set_acceleration_limits(a_max, 1000.0));
     ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
@@ -748,11 +758,34 @@ TEST(KinematicTrajectoryExponentialApproachC1, KnownExamplesRespectAccelerationL
 
     verifyMaxAccelerationInvariant(traj, start_time, /*horizon_s=*/200.0, /*samples_per_second=*/2000.0);
   }
+
+  // Regression-shaped case: initial acceleration already exceeds the configured limit -- the
+  // acceleration analogue of KnownExamplesRespectVelocityLimit's "v0 already too fast" case above.
+  // makeUpdateState() drops a0 for C1 (no matching continuity order there), so this collapses to the
+  // ordinary a0=0 case there while genuinely exercising C2's a0-matching/omega_a machinery.
+  for (const double a_max : { 0.2, 0.5, 1.0 }) {  // all well below a0's magnitude below
+    SCOPED_TRACE(::testing::Message() << "initial acceleration exceeding the limit, a_max=" << a_max);
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
+    ASSERT_TRUE(settings->set_velocity_limits(1000.0, 1000.0));
+    ASSERT_TRUE(settings->set_acceleration_limits(a_max, 1000.0));
+    ASSERT_TRUE(settings->set_omega_limits(1e-6, 1e3));
+
+    const geometry::Pose3Dd x0 = makePose(1, 0, 0, Eigen::Quaterniond::Identity());
+    const geometry::Twist3Dd v0(Eigen::Vector3d(0.1, 0, 0), Eigen::Vector3d::Zero());
+    const geometry::Accel3Dd a0(Eigen::Vector3d(3.5, 0, 0), Eigen::Vector3d::Zero());
+    const auto in_state = makeUpdateState<Trajectory>(start_time, x0, v0, a0);
+    const geometry::Pose3Dd goal = makePose(0, 0, 0, Eigen::Quaterniond::Identity());
+
+    Trajectory traj(settings);
+    traj.calculate(in_state, goal);
+
+    verifyMaxAccelerationInvariant(traj, start_time, /*horizon_s=*/200.0, /*samples_per_second=*/2000.0);
+  }
 }
 
-TEST(KinematicTrajectoryExponentialApproachC1, RandomTrajectoriesRespectAccelerationLimit)
+TYPED_TEST(KinematicTrajectoryExponentialApproachTest, RandomTrajectoriesRespectAccelerationLimit)
 {
-  using Trajectory = ExponentialApproachPose3DC1d;
+  using Trajectory = TypeParam;
 
   std::mt19937 rng(1337);  // fixed seed: failures must be reproducible, not flaky
   std::uniform_real_distribution<double> v_max_dist(0.1, 5.0);
@@ -768,7 +801,7 @@ TEST(KinematicTrajectoryExponentialApproachC1, RandomTrajectoriesRespectAccelera
   for (unsigned int trial = 0; trial < number_of_simulations; ++trial) {
     SCOPED_TRACE(::testing::Message() << "trial=" << trial);
 
-    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    auto settings = std::make_shared<typename Trajectory::KinematicTrajectorySettingsType>();
     const double omega_min = omega_min_dist(rng);
     ASSERT_TRUE(settings->set_velocity_limits(v_max_dist(rng), v_max_dist(rng)));
     ASSERT_TRUE(settings->set_acceleration_limits(a_max_dist(rng), a_max_dist(rng)));
@@ -776,10 +809,13 @@ TEST(KinematicTrajectoryExponentialApproachC1, RandomTrajectoriesRespectAccelera
 
     const geometry::Pose3Dd x0(randomVector3d(rng, 5.0), randomQuaternion(rng));
     const geometry::Twist3Dd v0(randomVector3d(rng, 10.0), randomVector3d(rng, 10.0));
+    // drawn just like RandomTrajectoriesRespectVelocityLimit's a0 above -- exercises the "a0 already
+    // exceeds a_max" regime for C2 (dropped again for C1) alongside the ordinary regime.
+    const geometry::Accel3Dd a0(randomVector3d(rng, 5.0), randomVector3d(rng, 5.0));
     const geometry::Pose3Dd goal(randomVector3d(rng, 5.0), randomQuaternion(rng));
 
     const rclcpp::Time start_time(0, 0);
-    const auto in_state = makeUpdateState<Trajectory>(start_time, x0, v0);
+    const auto in_state = makeUpdateState<Trajectory>(start_time, x0, v0, a0);
 
     Trajectory traj(settings);
     traj.calculate(in_state, goal);
@@ -790,8 +826,14 @@ TEST(KinematicTrajectoryExponentialApproachC1, RandomTrajectoriesRespectAccelera
 
 /*
  * C2-specific: matching the initial acceleration too is exactly what distinguishes the C2
- * (Accel-continuity) variant from C1, so this checks it directly rather than via the shared
- * fixture above (C1 has no acceleration continuity guarantee to hold to the same bar).
+ * (Accel-continuity) variant from C1, so these check it directly against ExponentialApproachPose3DC2d
+ * rather than via the shared fixture above (C1 has no acceleration continuity guarantee to hold to
+ * the same bar). KnownExamplesRespectAccelerationLimit/RandomTrajectoriesRespectAccelerationLimit
+ * above already exercise C2's a0-matching machinery under the shared velocity/acceleration
+ * invariants; the randomized test below additionally pins down the exact boundary condition itself
+ * (x_C2(0)=x0, x_C2'(0)=v0, x_C2''(0)=a0) across a wide spread of a0 values -- including some large
+ * enough to trigger determine_omega_a()'s retry/backoff path -- while re-checking both invariants
+ * hold under exactly the same draws.
  */
 TEST(KinematicTrajectoryExponentialApproachC2, EvaluateAtUpdateTimeReproducesTheInitialAccel)
 {
@@ -816,6 +858,65 @@ TEST(KinematicTrajectoryExponentialApproachC2, EvaluateAtUpdateTimeReproducesThe
   EXPECT_TRUE(eval.twist().angular().isApprox(v0.angular(), 1e-9));
   EXPECT_TRUE(eval.accel().linear().isApprox(a0.linear(), 1e-9));
   EXPECT_TRUE(eval.accel().angular().isApprox(a0.angular(), 1e-9));
+}
+
+TEST(KinematicTrajectoryExponentialApproachC2, RandomInitialAccelerationsAreReproducedExactlyAndRespectInvariants)
+{
+  using Trajectory = ExponentialApproachPose3DC2d;
+
+  std::mt19937 rng(2024);  // fixed seed: failures must be reproducible, not flaky
+  std::uniform_real_distribution<double> v_max_dist(0.1, 5.0);
+  std::uniform_real_distribution<double> a_max_dist(0.05, 5.0);
+  // omega_min/omega_max must respect the settings' own omega_min_upper_bound (1e-6) /
+  // omega_max_lower_bound (1e3); see RandomTrajectoriesRespectVelocityLimit's identical comment.
+  std::uniform_real_distribution<double> omega_min_dist(1e-9, 1e-6);
+  std::uniform_real_distribution<double> omega_max_dist(1e3, 5e3);
+
+  constexpr double random_horizon_s = 60.0;
+  constexpr double random_samples_per_second = 50.0;
+
+  for (unsigned int trial = 0; trial < number_of_simulations; ++trial) {
+    SCOPED_TRACE(::testing::Message() << "trial=" << trial);
+
+    auto settings = std::make_shared<Trajectory::KinematicTrajectorySettingsType>();
+    const double omega_min = omega_min_dist(rng);
+    ASSERT_TRUE(settings->set_velocity_limits(v_max_dist(rng), v_max_dist(rng)));
+    ASSERT_TRUE(settings->set_acceleration_limits(a_max_dist(rng), a_max_dist(rng)));
+    ASSERT_TRUE(settings->set_omega_limits(omega_min, omega_min + omega_max_dist(rng)));
+
+    const geometry::Pose3Dd x0(randomVector3d(rng, 5.0), randomQuaternion(rng));
+    const geometry::Twist3Dd v0(randomVector3d(rng, 10.0), randomVector3d(rng, 10.0));
+    // drawn from a wider range than a_max_dist above, so this also covers the "a0 already exceeds
+    // a_max" regime, analogous to RandomTrajectoriesRespectVelocityLimit's v0-vs-v_max spread.
+    const geometry::Accel3Dd a0(randomVector3d(rng, 10.0), randomVector3d(rng, 10.0));
+    const geometry::Pose3Dd goal(randomVector3d(rng, 5.0), randomQuaternion(rng));
+
+    const rclcpp::Time start_time(0, 0);
+    const geometry::StateAccel3Dd current_state(x0, v0, a0);
+    const Trajectory::UpdateStateType in_state(start_time, current_state);
+
+    Trajectory traj(settings);
+    traj.calculate(in_state, goal);
+
+    const auto eval = traj.evaluate<geometry::KinematicOrder::Accel>(start_time);
+    EXPECT_TRUE(eval.pose().linear().isApprox(x0.linear(), 1e-9));
+    // angularDistance(), not isApprox(): the Pose "-" operator canonicalizes its quaternion-diff
+    // through Eigen::AngleAxis (angle in [0,pi]), which discards q vs -q's original sign -- a
+    // physically meaningless artifact of quaternions' double cover that the earlier hand-picked
+    // examples above (all built from goal=Identity() with angle < pi) never surfaced. Comparing raw
+    // coefficients via isApprox() would spuriously fail on exactly the runs where the reconstructed
+    // quaternion lands on the opposite sheet; angularDistance() correctly treats q and -q as the
+    // same rotation.
+    EXPECT_LT(eval.pose().angular().angularDistance(x0.angular()), 1e-9);
+    EXPECT_TRUE(eval.twist().linear().isApprox(v0.linear(), 1e-9));
+    EXPECT_TRUE(eval.twist().angular().isApprox(v0.angular(), 1e-9));
+    EXPECT_TRUE(eval.accel().linear().isApprox(a0.linear(), 1e-9));
+    EXPECT_TRUE(eval.accel().angular().isApprox(a0.angular(), 1e-9));
+
+    verifyMaxVelocityInvariant(traj, v0.linear().norm(), v0.angular().norm(), random_horizon_s,
+                               random_samples_per_second);
+    verifyMaxAccelerationInvariant(traj, start_time, random_horizon_s, random_samples_per_second);
+  }
 }
 
 /*
