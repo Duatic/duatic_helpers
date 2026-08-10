@@ -189,6 +189,37 @@ TEST(KinematicVariable3DEigenOperators, CompoundAssignmentPlusMinusTimes)
   EXPECT_TRUE(a.vector().isApprox(makeVector6(2, 4, 6, 8, 10, 12)));
 }
 
+TEST(KinematicVariable3DEigenOperators, CompoundAssignmentAcceptsTheNextHigherOrder)
+{
+  Twist t(Eigen::Vector3d(1, 2, 3), Eigen::Vector3d(4, 5, 6));
+  const Accel a(Eigen::Vector3d(0.1, 0.2, 0.3), Eigen::Vector3d(0.4, 0.5, 0.6));
+
+  t += a;
+  EXPECT_TRUE(t.vector().isApprox(makeVector6(1.1, 2.2, 3.3, 4.4, 5.5, 6.6)));
+
+  t -= a;
+  EXPECT_TRUE(t.vector().isApprox(makeVector6(1, 2, 3, 4, 5, 6)));
+}
+
+TEST(KinematicVariable3DEigenOperators, PoseCompoundAssignmentAcceptsTwist)
+{
+  Pose pose(Eigen::Vector3d(1, 2, 3),
+            Eigen::Quaterniond(Eigen::AngleAxisd(0.7, Eigen::Vector3d(1, 0, 0).normalized())));
+  const Twist diff(Eigen::Vector3d(0.5, -0.5, 1.0), Eigen::Vector3d(0.2, 0.1, -0.3));
+
+  const Eigen::Vector3d original_linear = pose.linear();
+  const Eigen::Quaterniond original_angular = pose.angular();
+
+  pose += diff;
+  EXPECT_TRUE(pose.linear().isApprox(original_linear + diff.linear()));
+
+  pose -= diff;
+  EXPECT_TRUE(pose.linear().isApprox(original_linear, 1e-9));
+  // A quaternion and its negation represent the same rotation.
+  EXPECT_TRUE(pose.angular().isApprox(original_angular, 1e-9) ||
+              pose.angular().coeffs().isApprox(-original_angular.coeffs(), 1e-9));
+}
+
 TEST(KinematicVariable3DEigenOperators, FreeOperatorPlusAndTimes)
 {
   const Twist a(Eigen::Vector3d(1, 2, 3), Eigen::Vector3d(4, 5, 6));

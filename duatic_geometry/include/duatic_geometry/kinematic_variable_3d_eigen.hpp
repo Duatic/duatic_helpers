@@ -20,7 +20,9 @@ class KinematicVariable3DEigen<ScalarT, KinematicOrder::Pose>
 {
 public:
   using ScalarType = ScalarT;
-  using Self = KinematicVariable3DEigen<ScalarType, KinematicOrder::Pose>;
+  template <KinematicOrder NewOrder>
+  using SelfWithOrder = KinematicVariable3DEigen<ScalarType, NewOrder>;
+  using Self = SelfWithOrder<KinematicOrder::Pose>;
 
   using LinearDataType = Eigen::Vector<ScalarType, 3>;
   using AngularDataType = Eigen::Quaternion<ScalarType>;
@@ -76,6 +78,35 @@ public:
     return setLinearNeutral().setAngularNeutral();
   }
 
+  inline Self& operator+=(const SelfWithOrder<KinematicOrder::Twist>& other)
+  {
+    position += other.linear();
+    const ScalarT angle_other = other.angular().norm();
+    if (angle_other > std::numeric_limits<ScalarT>::epsilon()) {
+      const Eigen::Quaternion<ScalarT> orientation_diff =
+          Eigen::Quaternion<ScalarT>(Eigen::AngleAxis<ScalarT>(angle_other, other.angular() / angle_other));
+      orientation = (orientation_diff * orientation).normalized();
+    }
+    return *this;
+  }
+
+  inline Self& operator-=(const SelfWithOrder<KinematicOrder::Twist>& other)
+  {
+    position -= other.linear();
+    const ScalarT angle_other = other.angular().norm();
+    if (angle_other > std::numeric_limits<ScalarT>::epsilon()) {
+      const Eigen::Quaternion<ScalarT> orientation_diff =
+          Eigen::Quaternion<ScalarT>(Eigen::AngleAxis<ScalarT>(angle_other, other.angular() / angle_other));
+      orientation = (orientation_diff.conjugate() * orientation).normalized();
+    }
+    return *this;
+  }
+
+  Self operator-() const
+  {
+    return Self(-position, orientation.conjugate());
+  }
+
 private:
   LinearDataType position;
   AngularDataType orientation;
@@ -88,7 +119,9 @@ class KinematicVariable3DEigen
 {
 public:
   using ScalarType = ScalarT;
-  using Self = KinematicVariable3DEigen<ScalarType, Order>;
+  template <KinematicOrder NewOrder>
+  using SelfWithOrder = KinematicVariable3DEigen<ScalarType, NewOrder>;
+  using Self = SelfWithOrder<Order>;
 
   using DataType = Eigen::Vector<ScalarType, 6>;
 
@@ -159,15 +192,22 @@ public:
     return *this;
   }
 
-  inline Self& operator+=(const Self& other)
+  template <KinematicOrder OtherOrder>
+    requires((OtherOrder == Order) || (OtherOrder == Order + 1))
+  inline Self& operator+=(const SelfWithOrder<OtherOrder>& other)
   {
-    vector_ += other.vector_;
+    // other.vector() (public), not other.vector_ (private): when OtherOrder != Order, other is a
+    // different instantiation of this same class template, and template instantiations don't
+    // implicitly grant each other access to private members.
+    vector_ += other.vector();
     return *this;
   }
 
-  inline Self& operator-=(const Self& other)
+  template <KinematicOrder OtherOrder>
+    requires((OtherOrder == Order) || (OtherOrder == Order + 1))
+  inline Self& operator-=(const SelfWithOrder<OtherOrder>& other)
   {
-    vector_ -= other.vector_;
+    vector_ -= other.vector();
     return *this;
   }
 
@@ -199,35 +239,6 @@ inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
     return return_type(lhs.linear() - rhs.linear(), orientation_axis.angle() * orientation_axis.axis());
   } else {  // everything else
     return return_type(lhs.vector() - rhs.vector());
-  }
-}
-
-// special '-' operator declared outside to avoid infinite type recursion
-template <typename ScalarT, KinematicOrder Order>
-inline auto operator-(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
-                      const KinematicVariable3DEigen<ScalarT, Order + 1>& rhs)
-{
-  return lhs + (-rhs);
-}
-
-// special '+' operator declared outside to avoid infinite type recursion
-template <typename ScalarT, KinematicOrder Order>
-inline auto operator+(const KinematicVariable3DEigen<ScalarT, Order>& lhs,
-                      const KinematicVariable3DEigen<ScalarT, Order + 1>& rhs)
-{
-  using return_type = KinematicVariable3DEigen<ScalarT, Order>;
-
-  if constexpr (Order == KinematicOrder::Pose) {  // special case for pose
-    const ScalarT angle = rhs.angular().norm();
-    if (angle < std::numeric_limits<ScalarT>::epsilon()) {
-      return return_type(lhs.linear() + rhs.linear(), lhs.angular());
-    } else {
-      const Eigen::Quaternion<ScalarT> orientation_diff =
-          Eigen::Quaternion<ScalarT>(Eigen::AngleAxis<ScalarT>(angle, rhs.angular() / angle));
-      return return_type(lhs.linear() + rhs.linear(), (orientation_diff * lhs.angular()).normalized());
-    }
-  } else {  // everything else
-    return return_type(lhs.vector() + rhs.vector());
   }
 }
 
