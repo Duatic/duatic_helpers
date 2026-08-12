@@ -5,10 +5,15 @@ trajectory implemented in
 [`kinematic_trajectory_exponential_approach.hpp`](kinematic_trajectory_exponential_approach.hpp),
 covering both the double-pole (C1, velocity-continuous) variant in
 [`kinematic_trajectory_exponential_approach_C1.hpp`](kinematic_trajectory_exponential_approach_C1.hpp)
-and the triple-pole (C2, acceleration-continuous) variant in
-[`kinematic_trajectory_exponential_approach_C2.hpp`](kinematic_trajectory_exponential_approach_C2.hpp).
+and the accel-continuous (C2) variant in
+[`kinematic_trajectory_exponential_approach_C2.hpp`](kinematic_trajectory_exponential_approach_C2.hpp), which is
+built as an *additive patch* $x_{C2}(t) = x_{C1}(t) + h(t)$ on top of C1 rather than as a separate
+triple-pole polynomial trajectory.
 The C1 section covers both of that variant's limits: the velocity (`V-Limit`) bound on $x'(t)$, and
-the acceleration (`A-Limit`) bound on $x''(t)$ enforced by `determine_acc_omega()`.
+the acceleration (`A-Limit`) bound on $x''(t)$ enforced by `determine_acc_omega()`. The C2 section
+covers both of $\omega_{pv}$'s own limits (`determine_omega_pv()`, extending C1's own bounds to
+account for the full combined acceleration) and $\omega_a$'s own limits (`determine_omega_a()`,
+governing how fast the patch term $h(t)$ itself decays).
 
 # C1 (Twist-continuity) variant
 
@@ -503,254 +508,311 @@ whole result is clamped to $[\omega_{\min},\omega_{\max}]$ once more there too.
 
 # C2 (Accel-continuity) variant
 
-This section covers the triple-pole extension implemented in
-[`kinematic_trajectory_exponential_approach_C2.hpp`](kinematic_trajectory_exponential_approach_C2.hpp), which
-additionally matches the initial acceleration $a_0$ (so the resulting trajectory is continuous through pose,
-twist *and* accel at the update time, hence "C2").
+This section covers the additive-patch construction implemented in
+[`kinematic_trajectory_exponential_approach_C2.hpp`](kinematic_trajectory_exponential_approach_C2.hpp): rather
+than a separate triple-pole polynomial trajectory, C2 holds a private C1 (Twist-continuity) instance `c1_` and
+adds a correction term on top of it that brings the initial acceleration up to the requested $a_0$ exactly,
+without disturbing $x_{C1}$'s own pose/twist match at $t=0$.
 
 ## Definitions
 
 $$
-x(t) = \text{goal} + (A + Bt + Ct^2)\,e^{-\omega t}
+x_{C2}(t) = x_{C1}(t) + h(t), \qquad h(t) = D\,t^2\,e^{-\omega_a t}
 $$
 
-with
+$x_{C1}(t)$ is exactly the C1 trajectory proved above, evaluated at its own convergence rate $\omega_{pv}$
+(renamed from the C1 section's bare $\omega$ purely to disambiguate it here from the patch's own, independent
+rate $\omega_a$):
 
 $$
-A = x_0 - \text{goal}, \qquad B = v_0 + \omega A, \qquad C = \frac{a_0 + 2\omega B - \omega^2 A}{2} = \frac{a_0 + 2\omega v_0 + \omega^2 A}{2}
+x_{C1}(t) = \text{goal} + (A+Bt)\,e^{-\omega_{pv}t}, \qquad A = x_0-\text{goal}, \qquad B = v_0+\omega_{pv}A
 $$
 
-(the right-hand form of $C$ follows by substituting $B = v_0 + \omega A$; both are used interchangeably below).
-Differentiating,
+$D$ is half the *residual* acceleration $a_1$ — whatever $x_{C1}$'s own $t=0$ curvature doesn't already supply:
 
 $$
-x'(t) = \Big[(B-\omega A) + (2C-\omega B)t - \omega C\,t^2\Big]\,e^{-\omega t}
+P_1 := x_{C1}''(0) = -\omega_{pv}^2A - 2\omega_{pv}v_0, \qquad a_1 := a_0 - P_1, \qquad D := \frac{a_1}{2}
 $$
 
-$$
-x''(t) = \Big[(2C - 2\omega B + \omega^2 A) + (\omega^2 B - 4\omega C)\,t + \omega^2 C\,t^2\Big]\,e^{-\omega t}
-$$
-
-`goal`, `x_0`, `v_0`, `a_0`, `A`, `B`, `C` are vectors; `omega > 0`, `t >= 0` are scalars;
-$\lVert\cdot\rVert$ again denotes the Euclidean norm.
-
-### Basis decomposition
-
-Because the underlying ODE is linear, $e(t) := x(t) - \text{goal}$ is a superposition of three fixed
-responses, one per matched initial condition (position offset, velocity, acceleration):
+matching `calculate()`'s own `p1`, `a1`, `D_` exactly. Differentiating $x_{C1}$ (already proved above) and $h$
+separately and adding gives the code's own derivative formulas:
 
 $$
-e(t) = A\,\varphi_A(t) + v_0\,\varphi_v(t) + a_0\,\varphi_a(t)
+x_{C2}'(t) = x_{C1}'(t) + D\,t(2-\omega_a t)\,e^{-\omega_a t}, \qquad
+x_{C2}''(t) = x_{C1}''(t) + D\,(2-4\omega_a t+\omega_a^2t^2)\,e^{-\omega_a t}
 $$
 
-$$
-\varphi_A(t) = \Big(1+\omega t+\tfrac{\omega^2}{2}t^2\Big)e^{-\omega t}, \qquad
-\varphi_v(t) = \big(t+\omega t^2\big)e^{-\omega t}, \qquad
-\varphi_a(t) = \tfrac{t^2}{2}\,e^{-\omega t}
-$$
+`goal`, `x_0`, `v_0`, `a_0`, `A`, `B`, `P_1`, `a_1`, `D` are vectors; $\omega_{pv},\omega_a>0,\ t\ge0$ are
+scalars; $\lVert\cdot\rVert$ again denotes the Euclidean norm.
 
-Differentiating each basis response,
-
-$$
-x'(t) = A\,\varphi_A'(t) + v_0\,\varphi_v'(t) + a_0\,\varphi_a'(t)
-$$
+An identity used repeatedly below: substituting $B=v_0+\omega_{pv}A$ into
+$x_{C1}''(t)=\omega_{pv}\big(\omega_{pv}(A+Bt)-2B\big)e^{-\omega_{pv}t}$ shows that $x_{C1}''$ is *itself* a
+linear-times-exponential of exactly the shape the C1 V-Limit proof's Lemma A/B were built for:
 
 $$
-\varphi_A'(t) = -\tfrac{\omega^3}{2}t^2 e^{-\omega t}, \qquad
-\varphi_v'(t) = \big(1+\omega t-\omega^2t^2\big)e^{-\omega t}, \qquad
-\varphi_a'(t) = t\Big(1-\tfrac{\omega}{2}t\Big)e^{-\omega t}
+x_{C1}''(t) = (P_1+Q_1t)\,e^{-\omega_{pv}t}, \qquad Q_1 := \omega_{pv}^2v_0+\omega_{pv}^3A
 $$
 
-One can check $\varphi_A'(0)=0,\ \varphi_v'(0)=1,\ \varphi_a'(0)=0$, consistent with $x'(0)=v_0$ below.
+matching the header comment's $Q_1$ (never computed numerically in code — `determine_acc_omega_pv()` below only
+ever needs a closed-form *bound* on it, not its value).
 
-### Initial Conditions
+### Boundary conditions
 
-$$
-x(0) = \text{goal} + A = x_0, \qquad x'(0) = v_0, \qquad x''(0) = a_0
-$$
+> **Claim.** $x_{C2}(0)=x_0,\quad x_{C2}'(0)=v_0,\quad x_{C2}''(0)=a_0$, for **any** $\omega_a>0$.
 
-### Terminal Conditions
+*Proof.* $h(t)=Dt^2e^{-\omega_at}$ has a double zero at $t=0$: $h(0)=0$, and
+$h'(t)=Dt(2-\omega_at)e^{-\omega_at}$ gives $h'(0)=0$ too. So $x_{C2}(0)=x_{C1}(0)=x_0$ and
+$x_{C2}'(0)=x_{C1}'(0)=v_0$, both already established in the C1 section. For the acceleration,
+$h''(0)=D\cdot(2-0+0)\cdot1=2D=a_1=a_0-P_1$, so $x_{C2}''(0)=x_{C1}''(0)+h''(0)=P_1+(a_0-P_1)=a_0$ — exactly,
+and independent of $\omega_a$, since every $\omega_a$-bearing term of $h''$ is killed by the $t=0$ evaluation
+regardless of $\omega_a$'s actual value. $\blacksquare$
 
-$$
-x(\infty) = \text{goal}, \qquad x'(\infty) = 0, \qquad x''(\infty) = 0
-$$
+This is precisely what lets `calculate()` solve for $\omega_{pv}$ and then $\omega_a$ **independently**, in that
+order: $\omega_{pv}$ alone fixes $A,B,P_1$ (hence $a_1,D$), and $\omega_a$ only ever controls *how fast* $h$
+decays, never the exactness of the $t=0$ match.
 
 ---
 
-## Invariant
+## Lemma D — exact peaks of the patch term
 
-> **Claim.** For all $t \ge 0$,
+Because $h,h',h''$ are each a **fixed vector** $D$ times a **scalar** function of $t$,
+$\lVert h^{(n)}(t)\rVert = \lvert(\text{scalar factor})\rvert\cdot\lVert D\rVert$ exactly for every $t$ — no
+collinear worst-case reduction (à la the C1 proofs' Step 1) is needed here, since only one vector direction is
+ever involved.
+
+> **Lemma D.** For $D\ne0,\ \omega_a>0$, writing $u=\omega_at$ and $\kappa:=(\sqrt2-1)e^{\sqrt2-2}\approx0.2306$:
 > $$
-> \lVert x'(t)\rVert \;\le\; \lVert v_0\rVert \;+\; \frac{2}{e^2}\,\omega\lVert A\rVert \;+\; \kappa\,\frac{\lVert a_0\rVert}{\omega},
-> \qquad \kappa := (\sqrt2-1)\,e^{\sqrt2-2} \approx 0.2306.
+> \text{(a)}\ \sup_{t\ge0}\lVert h(t)\rVert = \frac{4\lVert D\rVert}{\omega_a^2e^2} = \frac{2\lVert a_1\rVert}{\omega_a^2e^2}, \text{ at } t=\tfrac2{\omega_a}
+> \qquad
+> \text{(b)}\ \sup_{t\ge0}\lVert h'(t)\rVert = \frac{2\kappa\lVert D\rVert}{\omega_a} = \frac{\kappa\lVert a_1\rVert}{\omega_a}, \text{ at } t=\tfrac{2-\sqrt2}{\omega_a}
+> $$
+> $$
+> \text{(c)}\ \sup_{t\ge0}\lVert h''(t)\rVert = 2\lVert D\rVert = \lVert a_1\rVert, \text{ at } t=0
 > $$
 
-Unlike the C1 case, $x'(t)$ is a *quadratic* (rather than linear) polynomial in $t$ times $e^{-\omega t}$: its
-derivative $x''(t)$ can vanish at up to **two** interior points instead of one (see the Remarks below), so no
-C1-shaped two-term $\max(\cdot,\cdot)$ bound is known to be exactly tight here. What follows instead is a
-triangle-inequality bound over the three basis responses above — looser than the tightest possible bound, but
-fully rigorous and cheap to state.
+*Proof.*
 
-### Proof
+**(a)** $h(t)=Dt^2e^{-\omega_at}=(D/\omega_a^2)\,u^2e^{-u}$. $\frac{d}{du}u^2e^{-u}=(2u-u^2)e^{-u}$ vanishes at
+$u=2$ (sign change $+\to-$, a maximum; $u^2e^{-u}\to0$ at both $u=0$ and $u\to\infty$), with value $4/e^2$.
+Hence $\sup_t\lVert h(t)\rVert=\lVert D\rVert\cdot4/(\omega_a^2e^2)$.
 
-By the basis decomposition, $x'(t)$ is a linear combination of the *constant* vectors $A, v_0, a_0$ with
-*scalar*, time-varying coefficients $\varphi_A'(t), \varphi_v'(t), \varphi_a'(t)$. The triangle inequality gives,
-for every $t \ge 0$,
+**(b)** $h'(t)=Dt(2-\omega_at)e^{-\omega_at}=(D/\omega_a)\,u(2-u)e^{-u}$. Let $g_1(u):=(2u-u^2)e^{-u}$;
+$g_1'(u)=e^{-u}(u^2-4u+2)$, vanishing at $u=2\mp\sqrt2$ (roots of $u^2-4u+2=0$). At $u=2-\sqrt2\in(0,2)$ (a
+maximum, since $u^2-4u+2$ changes sign $+\to-$ there):
+$g_1(2-\sqrt2)=(2-\sqrt2)\sqrt2\,e^{-(2-\sqrt2)}=2(\sqrt2-1)e^{\sqrt2-2}=2\kappa$. At $u=2+\sqrt2$ (a minimum):
+$g_1(2+\sqrt2)=-(2+\sqrt2)\sqrt2\,e^{-(2+\sqrt2)}=-2(\sqrt2+1)e^{-(2+\sqrt2)}$, with
+$$
+\frac{\lvert g_1(2+\sqrt2)\rvert}{g_1(2-\sqrt2)} = \frac{\sqrt2+1}{\sqrt2-1}\,e^{-2\sqrt2} = (3+2\sqrt2)\,e^{-2\sqrt2}\approx5.83\times0.059\approx0.35 < 1,
+$$
+so the $u=2-\sqrt2$ maximum dominates; since $g_1\to0$ at both $u=0$ and $u\to\infty$, these two critical points
+are the only candidates, giving $\sup_{u\ge0}\lvert g_1(u)\rvert=2\kappa$. Hence
+$\sup_t\lVert h'(t)\rVert=\lVert D\rVert\cdot2\kappa/\omega_a$.
+
+**(c)** $h''(t)=D(2-4\omega_at+\omega_a^2t^2)e^{-\omega_at}=D\,g_2(u)$, $g_2(u):=(u^2-4u+2)e^{-u}$, so
+$g_2(0)=2$. $g_2'(u)=e^{-u}(-u^2+6u-6)$, vanishing at $u=3\mp\sqrt3$. At $u=3-\sqrt3\approx1.27$:
+$g_2=(2-2\sqrt3)e^{-(3-\sqrt3)}\approx-0.41$. At $u=3+\sqrt3\approx4.73$: $g_2=(2+2\sqrt3)e^{-(3+\sqrt3)}\approx0.05$.
+Both are smaller in magnitude than $g_2(0)=2$, and $g_2\to0$ as $u\to\infty$, so $\sup_{u\ge0}\lvert g_2(u)\rvert=2$
+is attained at the **boundary** $u=0$ — unlike (a) and (b), not at an interior point. Hence
+$\sup_t\lVert h''(t)\rVert=2\lVert D\rVert=\lVert a_1\rVert$ (using $D=a_1/2$), attained at $t=0$, where it
+trivially equals $a_1$ by the very construction of $D$. $\blacksquare$
+
+Part (c) is the structural fact behind `determine_acc_omega_a()` below: **no** choice of $\omega_a$ ever changes
+$h''$'s peak, only *where in $t$* it occurs — $\omega_a$ has no lever at all on the acceleration side, only on
+the velocity (b) and position (a) sides, where it appears in the denominator (with (a) shrinking faster, as
+$1/\omega_a^2$, than (b)'s $1/\omega_a$).
+
+---
+
+## Bound on $\omega_{pv}$ — `determine_omega_pv()`
+
+$\omega_{pv}$ is solved **first** (Step 2 of `calculate()`, before $\omega_a$ exists at all), combining a
+velocity ceiling (reusing C1's own bound unchanged) and a new acceleration ceiling that additionally accounts
+for the patch's own contribution to $x_{C2}''$. Both ceilings must therefore hold for *any* subsequent
+$\omega_a$ — made possible below by Lemma D(c)'s $\omega_a$-independence.
+
+### Velocity ceiling — `determine_vel_omega_pv()`
+
+This delegates directly to `c1_.determine_vel_omega()`, i.e. reuses the C1 section's **V-Limit invariant**
+unchanged, applied to the $x_{C1}'$ term alone:
 
 $$
-\lVert x'(t)\rVert \le \lVert A\rVert\,\lvert\varphi_A'(t)\rvert + \lVert v_0\rVert\,\lvert\varphi_v'(t)\rvert + \lVert a_0\rVert\,\lvert\varphi_a'(t)\rvert
-\le \lVert A\rVert\,\overline{\varphi_A'} + \lVert v_0\rVert\,\overline{\varphi_v'} + \lVert a_0\rVert\,\overline{\varphi_a'},
+\lVert x_{C1}'(t)\rVert \le \max\Big\{\lVert v_0\rVert,\ \frac{\lVert v_0\rVert+\omega_{pv}\lVert A\rVert}{e}\Big\}
 $$
 
-where $\overline{f} := \sup_{t \ge 0}\lvert f(t)\rvert$ — no collinear-worst-case reduction (à la the C1 proof's
-Step 1) is needed here, since the triangle inequality already holds unconditionally for any relative
-orientation of $A, v_0, a_0$. It remains to compute each of the three suprema; writing $u = \omega t$ makes all
-three plain single-variable calculus exercises.
+This bounds only the $x_{C1}'$ term of $x_{C2}'(t)=x_{C1}'(t)+h'(t)$, not the full sum — see the Remarks below
+for why the $h'(t)$ remainder is deliberately left for $\omega_a$ to shrink, rather than folded into this
+ceiling.
 
-**$\overline{\varphi_A'}$.** $\varphi_A'(t) = -\tfrac{\omega}{2}u^2 e^{-u}$, so
-$\overline{\varphi_A'} = \tfrac{\omega}{2}\sup_{u\ge0}u^2e^{-u}$. Since
-$\frac{d}{du}\big(u^2e^{-u}\big) = (2u-u^2)e^{-u}$ vanishes at $u=2$ (a maximum, as the sign changes $+\to-$),
-$\sup_{u\ge0}u^2e^{-u} = 4/e^2$, hence
+### Acceleration ceiling — `determine_acc_omega_pv()`
 
+> **Claim.** For all $t\ge0$,
+> $$
+> \lVert x_{C2}''(t)\rVert \;\le\; \Big(2+\frac1e\Big)\omega_{pv}^2\lVert A\rVert \;+\; \Big(4+\frac1e\Big)\omega_{pv}\lVert v_0\rVert \;+\; \lVert a_0\rVert
+> $$
+
+This is exactly the bound `determine_acc_omega_pv()` inverts (setting the right-hand side $=a_{\max}$ and
+solving for the smallest non-negative $\omega_{pv}$ satisfying the resulting quadratic).
+
+**Lemma E** (exponential envelope). For $x\in[0,1]$: $\;e^{x-1}\le x+\tfrac1e$.
+
+*Proof.* Let $\phi(x)=x+\tfrac1e-e^{x-1}$, strictly concave since $\phi''(x)=-e^{x-1}<0$. $\phi(0)=\tfrac1e-e^{-1}=0$
+and $\phi(1)=1+\tfrac1e-1=\tfrac1e>0$. A concave function lies above the chord joining any two of its points, so
+on $[0,1]$, $\phi(x)\ge x\cdot\phi(1)=x/e\ge0$. $\blacksquare$
+
+**Proposition** (bound on $x_{C1}''$).
 $$
-\overline{\varphi_A'} = \frac{\omega}{2}\cdot\frac{4}{e^2} = \frac{2\omega}{e^2}.
-$$
-
-**$\overline{\varphi_v'}$.** $\varphi_v'(t) = (1+u-u^2)e^{-u}$. Its derivative is
-$\big[(1-2u)-(1+u-u^2)\big]e^{-u} = u(u-3)e^{-u}$, vanishing at $u=0$ (value $1$) and $u=3$ (value
-$-5e^{-3}\approx-0.249$); since $u(u-3) < 0$ on $(0,3)$, $\varphi_v'$ decreases from $1$ to $-5e^{-3}$ there and
-increases back toward $0$ for $u>3$. As $\lvert-5e^{-3}\rvert < 1$,
-
-$$
-\overline{\varphi_v'} = 1, \quad \text{attained at } u=0.
-$$
-
-**$\overline{\varphi_a'}$.** $\varphi_a'(t) = (u-\tfrac{u^2}{2})e^{-u}$. Its derivative is
-$\big[(1-u)-(u-\tfrac{u^2}{2})\big]e^{-u} = \big(\tfrac{u^2}{2}-2u+1\big)e^{-u}$, vanishing at
-$u = 2\pm\sqrt2$ (roots of $u^2-4u+2=0$). At $u=2-\sqrt2$:
-
-$$
-\varphi_a'\big(t\big) = (2-\sqrt2)\Big(1-\tfrac{2-\sqrt2}{2}\Big)e^{-(2-\sqrt2)} = (\sqrt2-1)\,e^{\sqrt2-2} =: \kappa \approx 0.2306
+\sup_{t\ge0}\lVert x_{C1}''(t)\rVert \;\le\; \Big(1+\frac1e\Big)\omega_{pv}^2\lVert A\rVert + \Big(2+\frac1e\Big)\omega_{pv}\lVert v_0\rVert.
 $$
 
-(a local maximum), while at $u=2+\sqrt2$, $\varphi_a' = -(1+\sqrt2)e^{-(2+\sqrt2)} \approx -0.0794$ (a local
-minimum, smaller in magnitude than $\kappa$). Hence
-
+*Proof.* From the identity in Definitions, $x_{C1}''(t)=(P_1+Q_1t)e^{-\omega_{pv}t}$, so by the vector triangle
+inequality (valid unconditionally, for any relative orientation of $P_1,Q_1$ — no collinear reduction needed):
 $$
-\overline{\varphi_a'} = \kappa, \quad \text{attained at } u = 2-\sqrt2.
+\lVert x_{C1}''(t)\rVert \le (\lVert P_1\rVert+\lVert Q_1\rVert t)\,e^{-\omega_{pv}t}, \qquad \text{so} \qquad
+\sup_t\lVert x_{C1}''(t)\rVert \le \max_{t\ge0}(p+qt)e^{-\omega_{pv}t}, \quad p=\lVert P_1\rVert,\ q=\lVert Q_1\rVert.
+$$
+By **Lemma A** (C1 section), this max equals $p$ if $q\le\omega_{pv}p$, or $\tfrac{q}{\omega_{pv}}e^{\omega_{pv}p/q-1}$
+otherwise. In the latter case, write $x=\omega_{pv}p/q\in[0,1)$ and apply **Lemma E**:
+$$
+\frac{q}{\omega_{pv}}e^{x-1} \le \frac{q}{\omega_{pv}}\Big(x+\frac1e\Big) = p+\frac{q}{\omega_{pv}e}.
+$$
+In the other case ($q\le\omega_{pv}p$), $p\le p+q/(\omega_{pv}e)$ trivially. Either way,
+$$
+\max_{t\ge0}(p+qt)e^{-\omega_{pv}t} \le \lVert P_1\rVert + \frac{\lVert Q_1\rVert}{\omega_{pv}e}.
+$$
+Now bound $P_1,Q_1$ by the triangle inequality:
+$\lVert P_1\rVert=\lVert{-\omega_{pv}^2A-2\omega_{pv}v_0}\rVert\le\omega_{pv}^2\lVert A\rVert+2\omega_{pv}\lVert v_0\rVert$,
+and $\lVert Q_1\rVert=\lVert\omega_{pv}^2v_0+\omega_{pv}^3A\rVert\le\omega_{pv}^2\lVert v_0\rVert+\omega_{pv}^3\lVert A\rVert$.
+Substituting,
+$$
+\sup_t\lVert x_{C1}''(t)\rVert \le \omega_{pv}^2\lVert A\rVert+2\omega_{pv}\lVert v_0\rVert + \frac{\omega_{pv}^2\lVert v_0\rVert+\omega_{pv}^3\lVert A\rVert}{\omega_{pv}e} = \Big(1+\frac1e\Big)\omega_{pv}^2\lVert A\rVert+\Big(2+\frac1e\Big)\omega_{pv}\lVert v_0\rVert. \quad\blacksquare
 $$
 
-Substituting the three suprema into the triangle-inequality bound gives
-
+*Proof of the Claim.* By the triangle inequality, $\lVert x_{C2}''(t)\rVert\le\lVert x_{C1}''(t)\rVert+\lVert h''(t)\rVert$
+for every $t$, so it suffices to bound each term's own supremum and add:
 $$
-\lVert x'(t)\rVert \le \lVert v_0\rVert\cdot 1 + \lVert A\rVert\cdot\frac{2\omega}{e^2} + \lVert a_0\rVert\cdot\frac{\kappa}{\omega},
+\sup_t\lVert x_{C1}''(t)\rVert \le \Big(1+\frac1e\Big)\omega_{pv}^2\lVert A\rVert+\Big(2+\frac1e\Big)\omega_{pv}\lVert v_0\rVert \qquad\text{(Proposition above)}
+$$
+$$
+\sup_t\lVert h''(t)\rVert = \lVert a_1\rVert \le \lVert a_0\rVert+\lVert P_1\rVert \le \lVert a_0\rVert+\omega_{pv}^2\lVert A\rVert+2\omega_{pv}\lVert v_0\rVert \qquad\text{(Lemma D(c), exact; then triangle ineq. twice)}
+$$
+Adding the two bounds (each holds for the corresponding sup separately, so their sum bounds
+$\sup_t\lVert x_{C2}''(t)\rVert$ directly):
+$$
+\sup_t\lVert x_{C2}''(t)\rVert \le \Big(2+\frac1e\Big)\omega_{pv}^2\lVert A\rVert + \Big(4+\frac1e\Big)\omega_{pv}\lVert v_0\rVert + \lVert a_0\rVert. \qquad\blacksquare
 $$
 
-which is the claimed invariant. $\blacksquare$
+Crucially, this derivation never needed $\omega_a$ — Lemma D(c) is exact and $\omega_a$-independent — which is
+exactly what makes it sound to fix $\omega_{pv}$ *before* $\omega_a$ is even chosen.
+
+#### Implementation relation
+
+Writing $c_2=\lVert A\rVert(2+\tfrac1e),\ c_1=\lVert v_0\rVert(4+\tfrac1e),\ c_0=\lVert a_0\rVert-a_{\max}$, the
+Claim's right-hand side $\le a_{\max}$ is exactly the quadratic inequality
+$$
+c_2\,\omega_{pv}^2+c_1\,\omega_{pv}+c_0\le0
+$$
+solved by `determine_acc_omega_pv()`. Since $c_2,c_1\ge0$ (norms are non-negative), the left-hand side is
+non-decreasing in $\omega_{pv}\ge0$, so — exactly as with C1's own `determine_acc_omega()` — the range endpoints
+are checked first ($\omega_{\min}$ first, for the same "safer on an exact tie" reason), and the quadratic is
+solved only in the remaining, strictly monotonic in-between case: there $c_0<0$ (else the $\omega_{\min}$ branch
+above would already have fired) with $c_2,c_1\ge0$, so exactly one non-negative root exists, at
+$$
+\omega^* = \frac{-c_1+\sqrt{c_1^2-4c_2c_0}}{2c_2},
+$$
+rationalized (multiplying by the conjugate $-c_1-\sqrt{c_1^2-4c_2c_0}$ over itself) to
+$$
+\omega^* = \frac{-2c_0}{c_1+\sqrt{c_1^2-4c_2c_0}},
+$$
+which avoids both the division-by-near-zero-$c_2$ instability of the direct form and a separate $c_2=0$ branch
+(as $c_2\to0$, this reduces cleanly to $-c_0/c_1$, the correct root of the then-linear equation) — the identical
+rationalization trick C1's own `determine_acc_omega()` already uses.
+
+---
+
+## Bound on $\omega_a$ — `determine_omega_a()`
+
+$\omega_a$ is solved **second** (Step 4 of `calculate()`), downstream of the now-fixed $\omega_{pv}$ and the
+resulting $a_1$ — governing only how fast the patch $h(t)$ itself decays.
+
+### Velocity ceiling — `determine_vel_omega_a()`
+
+By Lemma D(b), $\sup_t\lVert h'(t)\rVert=\kappa\lVert a_1\rVert/\omega_a$ **exactly**, strictly *decreasing* in
+$\omega_a$ (since $a_1$ — hence $D$ — does not depend on $\omega_a$ at all). Consequently:
+
+* If this axis' component of $a_1$ is $\le0$ (no residual to correct), $D=a_1/2=0$ on that axis, so $h\equiv0$
+  there and *no* choice of $\omega_a$ matters — the function returns $\omega_{\min}$, a deliberately
+  non-binding placeholder (see the axis-combination discussion below).
+* Otherwise, since the bound is strictly decreasing in $\omega_a$, the *largest* available rate $\omega_{\max}$
+  minimizes it, with no smaller $\omega_a$ ever doing better. By Lemma D(a), the *position* residual
+  $\sup_t\lVert h(t)\rVert=2\lVert a_1\rVert/(\omega_a^2e^2)$ shrinks even faster under the same choice (as
+  $1/\omega_a^2$ rather than $1/\omega_a$), so maximizing $\omega_a$ is simultaneously optimal for both the
+  velocity and the position side of the patch. The function returns $\omega_{\max}$ in this case.
+
+**Honesty note.** Unlike every other $\omega$-ceiling in this document, this one is not the inverse of a *tight
+target* (there is no $v_{\max}$-style threshold being solved for): it is a monotone-optimal choice given Lemma
+D(b)'s shape, not a guarantee that $\lVert h'(t)\rVert$ stays under any particular numeric margin. Combining it
+with the C1 V-Limit bound via the triangle inequality gives the honest combined statement
+$$
+\lVert x_{C2}'(t)\rVert \le \underbrace{\max\Big\{\lVert v_0\rVert,\ \frac{\lVert v_0\rVert+\omega_{pv}\lVert A\rVert}{e}\Big\}}_{\text{C1's V-Limit bound, at }\omega_{pv}} \;+\; \underbrace{\frac{\kappa\lVert a_1\rVert}{\omega_a}}_{\text{Lemma D(b), exact}}
+$$
+which is minimized, given $\omega_{pv}$ already fixed, by pushing $\omega_a$ as high as `omega_max()` allows —
+exactly what the function does — but which is not itself clamped against any $v_{\max}$.
+
+### Acceleration ceiling — `determine_acc_omega_a()`
+
+By Lemma D(c), $\sup_t\lVert h''(t)\rVert=\lVert a_1\rVert$ for **every** $\omega_a>0$: the peak is attained at
+$t=0$, where it equals $a_1$ by the boundary-condition construction itself, and this value simply does not
+depend on $\omega_a$. There is therefore no $\omega_a$ this function could return to bring an over-limit
+$\lVert a_1\rVert$ back under $a_{\max}$ — reducing that peak requires reshaping $a_1$ itself (i.e. $\omega_{pv}$,
+$A$, or $a_0$, which the previous section's acceleration ceiling on $\omega_{pv}$ is responsible for), not
+$\omega_a$. The function accordingly always returns the non-binding $\omega_{\max}$.
+
+### Combining axes and terms
+
+`determine_omega_a_component()` takes $\min$ of the two ceilings above (mirroring
+`determine_omega_pv_component()`'s structure), trivially collapsing to the velocity ceiling alone since the
+acceleration ceiling is always $\omega_{\max}$. `determine_omega_a()` then combines the linear and angular
+axes' candidates via $\max$ — not $\min$, unlike $\omega_{pv}$'s combination — because $\omega_a$ is a single
+*shared* rate applied to both axes' residuals simultaneously: each axis independently only ever asks for either
+$\omega_{\min}$ (no residual) or $\omega_{\max}$ (residual present, strictly the better choice per the velocity
+ceiling above), so the shared rate must be $\omega_{\max}$ whenever *either* axis has a residual — exactly what
+$\max(\cdot,\cdot)$ produces, since an $\omega_{\min}$ candidate from a residual-free axis can never outrank a
+genuine $\omega_{\max}$ need from the other.
+
+---
 
 ## Remarks
 
+### Ordering and independence
+
+$\omega_{pv}$ is solved using only $v_0,A,a_0$ — it never needs $\omega_a$ to exist. $\omega_a$ is solved
+second, using $\omega_{pv}$'s result (through $A,B,P_1,a_1$) but never needing to revisit $\omega_{pv}$. This
+one-directional dependency is exactly what makes the two-stage `calculate()` correct: the acceleration-ceiling
+Claim on $\omega_{pv}$ above holds for *any* subsequently chosen $\omega_a>0$ (Lemma D(c)'s $\omega_a$-independence),
+so nothing computed in Step 2 needs to be revisited once Step 4 picks a concrete $\omega_a$.
+
 ### Tightness
 
-Unlike the C1 bound, this one is **not** generally tight: the three suprema above are attained at three
-*different* values of $u$ ($0$, $2$, and $2-\sqrt2$ respectively), so equality in the triangle inequality would
-require $A$, $v_0$ and $a_0$ to simultaneously peak at the same $t$ — generically impossible. The true
-supremum is smaller.
-
-### Exact characterization
-
-Since $e^{-\omega t}\to0$ monotonically and $x'(t) = Q(t)e^{-\omega t}$ for the quadratic
-$Q(t) = (B-\omega A) + (2C-\omega B)t - \omega C t^2$, every extremum of $x'(t)$ on $[0,\infty)$ occurs either at
-$t=0$ or at a root of $x''(t) = 0$, i.e. (writing $u=\omega t$) a root of
-
-$$
-C\,u^2 + (B\omega - 4C)\,u + (A\omega^2 - 2B\omega + 2C) = 0,
-\qquad D = \omega^2(B^2-4AC) + 8C^2,
-\qquad u_\pm = \frac{(4C-B\omega)\pm\sqrt D}{2C}
-$$
-
-(only real, non-negative roots correspond to points on the actual trajectory). So, in the worst-case collinear
-configuration of $A, v_0, a_0$ (treated as signed scalars along a common axis), the *exact* peak speed is
-
-$$
-\lVert x'(t)\rVert \le \max\big(\lVert v_0\rVert,\ \lvert x'(t_+)\rvert,\ \lvert x'(t_-)\rvert\big), \qquad t_\pm = u_\pm/\omega,
-$$
-
-evaluating $x'$ at whichever of $t_\pm$ are real and non-negative. Unlike the C1 case's single linear
-stationarity condition, this quadratic one has no clean closed-form inverse for $\omega$ in general — both
-roots depend jointly on $A, B, C$ (via $D$), and $x'$ must be evaluated at each individually — which is why the
-implementation below falls back to the simpler (if looser) two-envelope approximation rather than solving this
-exactly.
+The $\omega_{pv}$ acceleration bound above is intentionally loose in three separate places — (i) Lemma A's
+two-branch max is bounded rather than solved exactly, via Lemma E; (ii) $P_1,Q_1$ are bounded by the triangle
+inequality rather than by their own worst-case collinear analysis (as the C1 A-Limit section did for $x''$
+alone); (iii) $\lVert a_1\rVert$ is bounded via $\lVert a_0\rVert+\lVert P_1\rVert$ rather than computed exactly.
+Each loosening keeps the final inversion closed-form (one quadratic in $\omega_{pv}$) at the cost of
+conservatism — the same trade-off C1's own `determine_acc_omega()` already makes. By contrast, Lemma D itself is
+**exact**: each of its three suprema is the true peak of a scalar-times-fixed-vector function, not an
+over-approximation.
 
 ### Intuition
 
-* Same convergence behavior as C1 (no position overshoot, everything decays to the goal), but now also
-  matching the initial *acceleration* exactly, rather than only pose and twist.
-* Because $x'(t)$ can now have two interior extrema instead of one, the velocity profile can have a more
-  complex shape (e.g. overshoot, partially recover, overshoot again) than C1's single-hump profile, especially
-  when $a_0$ is large and opposes the direction of approach.
-
-## Implementation relation
-
-`determine_omega()` doesn't attempt to invert the exact (root-of-a-quadratic) characterization above — instead
-it uses two simpler, independently-invertible proxy constraints, each an algebraic rearrangement of one
-dominant piece of the (rigorously proven) sum invariant, requiring both to individually stay under $v_{\max}$:
-
-$$
-\text{(linear term)} \qquad \frac{\lVert v_0\rVert + 2\omega\lVert A\rVert}{e^2} \le v_{\max}
-$$
-
-$$
-\text{(quadratic term)} \qquad \frac{\lVert v_0\rVert + \dfrac{\lVert a_0\rVert}{2\omega} + \dfrac{\omega\lVert A\rVert}{2}}{e} \le v_{\max}
-$$
-
-As with the C1 "Approximate V-Limit" section, this trades exactness for a closed form: each constraint alone is
-easy to invert for $\omega$, and their intersection (the smaller of the two resulting $\omega$ estimates) is used
-as a practical, not provably-tight, stand-in for the exact bound above — matching the spirit of C1's own
-estimate, just with an extra term for $a_0$.
-
-**Linear term** is monotonically increasing in $\omega$ (the same shape as the C1 bound, just rescaled: $e^2$
-instead of $e$, $2\lVert A\rVert$ instead of $\lVert A\rVert$), so it simply clamps $\omega$ from above,
-analogously to C1:
-
-$$
-\omega_{\text{lin}} =
-\begin{cases}
-  \omega_{\min} &:\quad \omega_{\min}\cdot 2\lVert A\rVert \ge e^2 v_{\max} - \lVert v_0\rVert \\
-  \omega_{\max} &:\quad \omega_{\max}\cdot 2\lVert A\rVert < e^2 v_{\max} - \lVert v_0\rVert \\
-  \dfrac{e^2 v_{\max} - \lVert v_0\rVert}{2\lVert A\rVert} &:\quad \text{else}
-\end{cases}
-$$
-
-**Quadratic term** rearranges (multiplying through by $2\omega > 0$) to
-$\lVert A\rVert\,\omega^2 - 2\big(e\,v_{\max}-\lVert v_0\rVert\big)\,\omega + \lVert a_0\rVert \le 0$ — an
-upward parabola in $\omega$, feasible between its two roots $\omega_-\le\omega_+$ (if real). The desired answer
-is always the point in $[\omega_{\min},\omega_{\max}]$ closest to $\omega_+$: if $\omega_+$ itself falls outside
-that range, the least-bad choice is simply the nearest endpoint, i.e. exactly
-$\mathrm{clamp}(\omega_+, \omega_{\min}, \omega_{\max})$. $\omega_-$ never changes that answer (so it is not
-computed at all): $\omega_-\le\omega_+$ always holds, so moving from $\omega_+$ *toward* $[\omega_{\min},
-\omega_{\max}]$ can only ever move into the feasible interval $[\omega_-,\omega_+]$ or stop short of it, never
-overshoot past $\omega_-$ out the other side. Writing $v_{\text{dec}} := e\,v_{\max}-\lVert v_0\rVert$ and
-$D_2 := v_{\text{dec}}^2 - \lVert A\rVert\lVert a_0\rVert$:
-
-$$
-\omega_{\text{sq}} =
-\begin{cases}
-  \omega_{\max} &:\quad \lVert A\rVert = 0 \quad \text{(no upper bound from this term at all)} \\
-  \mathrm{clamp}\Big(\sqrt{\lVert a_0\rVert / \lVert A\rVert},\ \omega_{\min},\ \omega_{\max}\Big) &:\quad D_2 < 0 \quad \text{(this term's minimum alone exceeds } v_{\max}\text{)} \\
-  \mathrm{clamp}\left(\dfrac{v_{\text{dec}} + \sqrt{D_2}}{\lVert A\rVert},\ \omega_{\min},\ \omega_{\max}\right) &:\quad \text{else}
-\end{cases}
-$$
-
-**Combining** the two, exactly as `determine_omega()` does:
-
-$$
-\omega = \min(\omega_{\text{lin}},\ \omega_{\text{sq}})
-$$
-
-which is safe to combine this way (without any extra clamping) precisely because $\mathrm{clamp}(\cdot,
-\omega_{\min}, \omega_{\max})$ is monotonic: for a monotonic $f$, $\min(f(a), f(b)) = f(\min(a,b))$, so the min
-of the two already-clamped candidates equals the clamp of their raw min.
-
-As in the C1 case, separate linear and angular estimates are computed this way and the smaller $\omega$ of the
-two is used, synchronizing both motions to the more restrictive one.
+* The patch $h(t)$ is a pure *correction* term: it and its own velocity are exactly zero at $t=0$, contributing
+  nothing to the pose/twist match, and it exists solely to make up whatever acceleration $x_{C1}$ alone doesn't
+  already supply.
+* $a_1=a_0-P_1$ can be small even when $a_0$ is large, if $x_{C1}$'s own $t=0$ jump $P_1$ already happens to
+  point the same way — conversely $a_1$ can *exceed* $a_0$ in magnitude if $P_1$ points the opposite way, which
+  is exactly why the acceleration ceiling on $\omega_{pv}$ bounds $\lVert a_1\rVert$ via
+  $\lVert a_0\rVert+\lVert P_1\rVert$ rather than assuming $\lVert a_1\rVert\le\lVert a_0\rVert$.
+* Because $\omega_a$ has no lever on the acceleration side (Lemma D(c)) but a strictly beneficial one on both
+  the velocity and position sides (Lemma D(a),(b)), the optimal policy is always "push $\omega_a$ as high as
+  `omega_max()` allows" — there is no interior trade-off to solve for, unlike every $\omega_{pv}$/C1 ceiling
+  above. This is exactly why `determine_vel_omega_a()`'s logic collapses to a two-way choice between
+  $\omega_{\min}$ (non-binding) and $\omega_{\max}$, rather than an inverted closed-form threshold.
