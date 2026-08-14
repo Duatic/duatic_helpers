@@ -1,0 +1,14 @@
+# Release a weld made by AttachModel.
+#
+# The joint itself stays in Gazebo once injected; detaching only breaks it, so a later
+# AttachModel with the same tag re-welds without injecting a second joint.
+
+string child_model
+# Which coupling to release. Empty releases every live coupling of this model, which
+# is what a reset wants.
+string tag
+---
+bool success
+string message
+# The tags that were actually released.
+string[] released

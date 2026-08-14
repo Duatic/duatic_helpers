@@ -1,0 +1,24 @@
+# Weld one Gazebo model rigidly to a link of another, at their current relative pose.
+#
+# Gazebo has no service for this. Its DetachableJoint system can only be declared in
+# SDF, per pair, and gz-sim 8 has no suppress_initial_attach — so a declared object is
+# welded from the moment the world loads. This service injects the system at call time
+# instead, which is what makes arbitrary pairs possible.
+#
+# The HOLDER is the parent. child_model's pose is resolved through the joint, so
+# getting this round the wrong way makes the holder follow the load instead.
+
+# What gets welded. Must be a non-static model.
+string child_model
+# Who holds it. Empty means the robot named by the node's robot_model parameter.
+# May be static — welding to the floor is how a placed object is kept from creeping.
+string parent_model
+# Which link of the holder. Empty means its first link.
+string parent_link
+# Names this coupling, so one object can be held by different holders over its life
+# and each can be released independently. Free-form; "grasp", "stow" and "pin" are
+# the ones the bag-lifting demo uses.
+string tag
+---
+bool success
+string message

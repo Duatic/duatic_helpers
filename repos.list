@@ -1,0 +1,25 @@
+repositories:
+  duatic_ros2control:
+    type: git
+    url: https://github.com/Duatic/duatic_ros2control.git
+    version: main
+  rsl_drive_sdk:
+    type: git
+    url: https://github.com/Duatic/rsl_drive_sdk.git
+    version: main
+  ethercat_sdk_master:
+    type: git
+    url: https://github.com/Duatic/ethercat_sdk_master.git
+    version: master
+  soem_interface:
+    type: git
+    url: https://github.com/Duatic/soem_interface.git
+    version: master
+  soem_vendor:
+    type: git
+    url: https://github.com/Duatic/soem_vendor.git
+    version: main
+  duatic_message_logger:
+    type: git
+    url: https://github.com/Duatic/duatic_message_logger.git
+    version: main

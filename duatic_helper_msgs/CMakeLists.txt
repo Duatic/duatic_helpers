@@ -13,6 +13,12 @@ find_package(sensor_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetJointStates.srv"
+  # Scene manipulation for duatic_gazebo's sim_scene node. Here rather than in
+  # duatic_gazebo so that callers depend on the interfaces alone — the simulated clamp
+  # driver needs AttachModel to have a load welded to it, and an end-effector package
+  # has no business pulling in a whole simulation to get two service definitions.
+  "srv/AttachModel.srv"
+  "srv/DetachModel.srv"
   DEPENDENCIES std_msgs sensor_msgs
 )
 
