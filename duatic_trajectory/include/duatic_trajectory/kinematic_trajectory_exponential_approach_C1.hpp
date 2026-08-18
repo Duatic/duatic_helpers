@@ -1,15 +1,15 @@
 #pragma once
 
+#include <Eigen/Geometry>
+#include <concepts>
+#include <numbers>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <concepts>
 #include <memory>
-#include <numbers>
 #include <type_traits>
 #include <utility>
-
-#include <Eigen/Geometry>
 
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>
@@ -53,7 +53,7 @@ namespace duatic::trajectory
  *  extremum can exceed it only inside that window. determine_acc_omega() below bounds both candidates
  *  unconditionally rather than gating the interior one on k, for simplicity.
  *
- * Separate linear and angular max velocities, but synchonize both mothins by using the smalles omega of both
+ * Separate linear and angular max velocities, but synchronize both mothins by using the smallest omega of both
  *
  * Note that the entire non-const calculation can be done in the goal's diff-type and be added to the goal.
  * The diff-evlaluation converges toward numerically stable zero

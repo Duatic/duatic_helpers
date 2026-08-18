@@ -4,7 +4,8 @@
 #include <duatic_geometry/annotation.hpp>
 #include <duatic_geometry_msgs/encoder.hpp>
 
-using namespace duatic::geometry;
+using duatic::geometry::is_stamped_v;
+using duatic::geometry::is_timed_v;
 
 // Kept as the flat `duatic_geometry_msgs` namespace (matching the rosidl-generated
 // `duatic_geometry_msgs::msg::*` types living in the same package) rather than the

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cassert>
 #include <concepts>
+
+#include <cassert>
 #include <memory>
 #include <utility>
 

@@ -22,7 +22,7 @@ concept Encoder =
       T::encode(const_data, message_stamped);
       T::decode(const_message, data);
       T::decode(const_message_stamped, data);
-    };
+    };  // NOLINT(readability/braces)
 
 // forward declaration for later concretizations
 template <typename T>

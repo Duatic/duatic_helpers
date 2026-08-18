@@ -59,7 +59,8 @@ inline std::ostream& operator<<(std::ostream& os, const StampedData<DataT, TimeS
 {
   os << "Stamped:" << std::endl << " - Time: ";
   stamped.stream_time(os);
-  os << std::endl << " - Frame: " << stamped.frame_id() << std::endl << " - Data: " << static_cast<const DataT&>(stamped);
+  os << std::endl << " - Frame: " << stamped.frame_id() << std::endl  // line break
+     << " - Data: " << static_cast<const DataT&>(stamped);
   return os;
 }
 

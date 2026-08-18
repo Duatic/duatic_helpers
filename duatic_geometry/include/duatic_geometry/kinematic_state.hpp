@@ -35,14 +35,14 @@ public:
   using KinematicVariable3DType = KinematicVariable3DTT<ScalarType, Order>;
 
   inline constexpr KinematicState() = default;
-  inline constexpr KinematicState(const Self& other) = default;
-  inline constexpr KinematicState(Self&& other) = default;
+  inline constexpr KinematicState(const Self& other) = default;  // NOLINT(runtime/explicit)
+  inline constexpr KinematicState(Self&& other) = default;  // NOLINT(runtime/explicit)
 
   inline Self& operator=(const Self& other) = default;
   inline Self& operator=(Self&& other) = default;
 
   template <typename... Args>
-  inline constexpr KinematicState(Args&&... args)
+  inline explicit constexpr KinematicState(Args&&... args)
     requires(sizeof...(Args) == to_number(OrderDepth) + 1)
     : variables_(std::forward<Args>(args)...)
   {

@@ -1,15 +1,15 @@
 #pragma once
 
+#include <Eigen/Geometry>
+#include <concepts>
+#include <numbers>
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <concepts>
 #include <memory>
-#include <numbers>
 #include <type_traits>
 #include <utility>
-
-#include <Eigen/Geometry>
 
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>

@@ -15,7 +15,8 @@
 
 #include <duatic_geometry_msgs/encoder.hpp>
 
-using namespace duatic::geometry;
+using duatic::geometry::KinematicOrder;
+using duatic::geometry::KinematicVariable;
 
 namespace duatic_geometry_msgs
 {

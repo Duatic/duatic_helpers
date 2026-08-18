@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include <type_traits>
-
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+
+#include <type_traits>
 
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_geometry_msgs/duatic_geometry_msgs.hpp>

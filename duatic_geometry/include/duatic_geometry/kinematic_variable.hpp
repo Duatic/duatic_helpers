@@ -34,9 +34,9 @@ concept KinematicVariable = requires(T& variable, const T& const_variable) {
 
   { T::kinematic_order } -> std::convertible_to<KinematicOrder>;
 
-  { const_variable - const_variable };
+  { const_variable - const_variable };  // NOLINT(readability/braces)
   requires kinematic_diff_of_helper<std::remove_cvref_t<decltype(const_variable - const_variable)>, T>();
-};
+};  // NOLINT(readability/braces)
 
 template <typename T>
 concept KinematicDiffVariable = KinematicVariable<T> && (T::kinematic_order > KinematicOrder::Pose) &&
@@ -48,7 +48,7 @@ concept KinematicDiffVariable = KinematicVariable<T> && (T::kinematic_order > Ki
                                   { variable += const_variable } -> std::same_as<T&>;
                                   { variable -= const_variable } -> std::same_as<T&>;
                                   { variable *= scalar } -> std::same_as<T&>;
-                                };
+                                };  // NOLINT(readability/braces)
 
 // trait helpers
 

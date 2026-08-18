@@ -31,8 +31,8 @@ public:
   static_assert(Self::kinematic_order == KinematicOrder::Pose);
 
   inline constexpr KinematicVariable3DEigen() = default;
-  inline constexpr KinematicVariable3DEigen(const Self& other) = default;
-  inline constexpr KinematicVariable3DEigen(Self&& other) = default;
+  inline constexpr KinematicVariable3DEigen(const Self& other) = default;  // NOLINT(runtime/explicit)
+  inline constexpr KinematicVariable3DEigen(Self&& other) = default;  // NOLINT(runtime/explicit)
 
   inline Self& operator=(const Self& other) = default;
   inline Self& operator=(Self&& other) = default;
@@ -129,14 +129,14 @@ public:
   static_assert(Self::kinematic_order > KinematicOrder::Pose);
 
   inline constexpr KinematicVariable3DEigen() = default;
-  inline constexpr KinematicVariable3DEigen(const Self& other) = default;
-  inline constexpr KinematicVariable3DEigen(Self&& other) = default;
+  inline constexpr KinematicVariable3DEigen(const Self& other) = default;  // NOLINT(runtime/explicit)
+  inline constexpr KinematicVariable3DEigen(Self&& other) = default;  // NOLINT(runtime/explicit)
 
   inline Self& operator=(const Self& other) = default;
   inline Self& operator=(Self&& other) = default;
 
   template <typename VectorCtor>
-  inline KinematicVariable3DEigen(const VectorCtor& vector_init) : vector_(vector_init)
+  inline explicit KinematicVariable3DEigen(const VectorCtor& vector_init) : vector_(vector_init)
   {
   }
 

@@ -19,7 +19,7 @@ concept Timed = requires(T& mutable_value, const T& const_value) {
 
   { mutable_value.data() } -> std::same_as<typename T::DataType&>;
   { const_value.data() } -> std::same_as<const typename T::DataType&>;
-};
+};  // NOLINT(readability/braces)
 
 // Satisfied by StampedData<DataT, TimestampT> (see stamped.hpp) and anything else additionally
 // exposing a frame_id() accessor on top of the Timed interface.
@@ -27,7 +27,7 @@ template <typename T>
 concept Stamped = Timed<T> && requires(T& mutable_value, const T& const_value) {
   { mutable_value.frame_id() } -> std::same_as<std::string&>;
   { const_value.frame_id() } -> std::same_as<const std::string&>;
-};
+};  // NOLINT(readability/braces)
 
 // trait helpers
 

@@ -1,9 +1,8 @@
 #include <gtest/gtest.h>
+#include <Eigen/Dense>
 
 #include <sstream>
 #include <string>
-
-#include <Eigen/Dense>
 
 #include <duatic_geometry/geometry_eigen.hpp>
 

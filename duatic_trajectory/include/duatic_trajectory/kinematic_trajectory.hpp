@@ -1,8 +1,9 @@
 #pragma once
 
 #include <concepts>
-#include <memory>
 #include <numbers>
+
+#include <memory>
 #include <utility>
 
 #include <duatic_geometry/annotation.hpp>
@@ -21,7 +22,7 @@ concept KinematicTrajectorySettings = requires(const T& const_variable) {
 
   { const_variable.acceleration_limit_linear() } -> std::same_as<typename T::ScalarType>;
   { const_variable.acceleration_limit_angular() } -> std::same_as<typename T::ScalarType>;
-};
+};  // NOLINT(readability/braces)
 
 // trait helpers
 
@@ -124,24 +125,26 @@ concept KinematicTrajectory =
       { T::continuity_order } -> std::convertible_to<geometry::KinematicOrder>;
 
       // calculate an entire new trajectory starting from the given state
-      { variable.calculate(in_update_state, in_description) };
+      { variable.calculate(in_update_state, in_description) };  // NOLINT(readability/braces)
 
-      { variable.calculate_neutral(in_update_state) };
+      { variable.calculate_neutral(in_update_state) };  // NOLINT(readability/braces)
 
       // update the existing trajectory starting from the given timestamp
-      { variable.update(in_timestamp, in_description) };
+      { variable.update(in_timestamp, in_description) };  // NOLINT(readability/braces)
 
-      { variable.update_neutral(in_timestamp) };
+      { variable.update_neutral(in_timestamp) };  // NOLINT(readability/braces)
 
       // update from an existing trajectory starting from the given timestamp
-      { variable.update_from(const_variable, in_timestamp, in_description) };
+      { variable.update_from(const_variable, in_timestamp, in_description) };  // NOLINT(readability/braces)
 
-      { const_variable.template evaluate<geometry::KinematicOrder::Pose>(in_timestamp, out_state) };
+      {
+        const_variable.template evaluate<geometry::KinematicOrder::Pose>(in_timestamp, out_state)
+      };  // NOLINT(readability/braces)
 
       {
         const_variable.template evaluate<geometry::KinematicOrder::Pose>(in_timestamp)
       } -> std::same_as<typename T::template KinematicState<geometry::KinematicOrder::Pose>>;
-    };
+    };  // NOLINT(readability/braces)
 
 template <typename T>
 struct is_kinematic_trajectory : std::bool_constant<KinematicTrajectory<T>>

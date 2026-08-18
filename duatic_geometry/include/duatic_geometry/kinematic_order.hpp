@@ -1,10 +1,10 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <ostream>
 #include <string>
 #include <type_traits>
-#include <assert.h>
 
 namespace duatic::geometry
 {
@@ -65,9 +65,9 @@ inline std::ostream& operator<<(std::ostream& os, const KinematicOrder order)
 // compare it directly (no cast to the underlying type required); only arithmetic (which enums
 // don't support natively) needs one, funneled through to_number() below.
 
-template <typename OffsetT>
-  requires std::is_convertible_v<const OffsetT, const std::underlying_type_t<KinematicOrder>>
-inline constexpr KinematicOrder operator+(const KinematicOrder order, const OffsetT offset)
+template <typename offset_t>
+  requires std::is_convertible_v<const offset_t, const std::underlying_type_t<KinematicOrder>>
+inline constexpr KinematicOrder operator+(const KinematicOrder order, const offset_t offset)
 {
   using underlying_t = std::underlying_type_t<KinematicOrder>;
   const underlying_t order_sum = to_number(order) + static_cast<underlying_t>(offset);
@@ -76,9 +76,9 @@ inline constexpr KinematicOrder operator+(const KinematicOrder order, const Offs
   return static_cast<KinematicOrder>(order_sum);
 }
 
-template <typename OffsetT>
-  requires std::is_convertible_v<const OffsetT, const std::underlying_type_t<KinematicOrder>>
-inline constexpr KinematicOrder& operator+=(KinematicOrder& order, const OffsetT offset)
+template <typename offset_t>
+  requires std::is_convertible_v<const offset_t, const std::underlying_type_t<KinematicOrder>>
+inline constexpr KinematicOrder& operator+=(KinematicOrder& order, const offset_t offset)
 {
   order = order + offset;
   return order;

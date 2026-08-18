@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include <array>
 #include <numbers>
+
+#include <array>
 #include <random>
 
 #include <duatic_trajectory/trajectory_eigen.hpp>

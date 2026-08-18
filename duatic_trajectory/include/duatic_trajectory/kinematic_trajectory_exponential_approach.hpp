@@ -1,11 +1,12 @@
 #pragma once
 
+#include <concepts>
+#include <numbers>
+
 #include <cassert>
 #include <cmath>
-#include <concepts>
 #include <limits>
 #include <memory>
-#include <numbers>
 #include <type_traits>
 #include <utility>
 
@@ -24,7 +25,7 @@ concept KinematicTrajectorySettingsExponentialApproach =
     KinematicTrajectorySettings<T> && requires(const T& const_variable) {
       { const_variable.omega_min() } -> std::same_as<typename T::ScalarType>;
       { const_variable.omega_max() } -> std::same_as<typename T::ScalarType>;
-    };
+    };  // NOLINT(readability/braces)
 
 /*
  * Plain-data default implementation of KinematicTrajectorySettingsExponentialApproach: public members, no

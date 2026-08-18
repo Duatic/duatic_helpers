@@ -264,7 +264,7 @@ Goal: Find largest $\omega > 0$ that satisfies $\lVert x'(t)\rVert \le v_{\max}$
 As $\lVert v_0 \rVert$ might be too big and $\lVert A\rVert$ might be $0$, a minimum and maximum convergence rate, $\omega_{\min}$ and $\omega_{\max}$, are necessary.<br>
 Thus:
 $$
-\omega = 
+\omega =
 \begin{cases}
   \omega_{\min} &:\quad \omega_{\min} \lVert A\rVert >= e\, v_{\max} - \lVert v_0 \rVert \\
   \omega_{\max} &:\quad \omega_{\max} \lVert A\rVert <  e\, v_{\max} - \lVert v_0 \rVert \quad \text{: unequal to prefer stable $\omega_{\min}$ in the case of equality}\\

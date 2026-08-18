@@ -15,7 +15,8 @@
 #include <duatic_geometry_msgs/msg/state_twist.hpp>
 #include <duatic_geometry_msgs/msg/state_twist_stamped.hpp>
 
-using namespace duatic::geometry;
+using duatic::geometry::is_kinematic_state_v;
+using duatic::geometry::KinematicOrder;
 
 namespace duatic_geometry_msgs
 {
