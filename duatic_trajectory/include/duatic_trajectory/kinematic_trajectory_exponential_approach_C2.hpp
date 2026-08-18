@@ -15,6 +15,7 @@
 #include <duatic_trajectory/kinematic_trajectory.hpp>
 #include <duatic_trajectory/kinematic_trajectory_base.hpp>
 #include <duatic_trajectory/kinematic_trajectory_exponential_approach_C1.hpp>
+#include <duatic_trajectory/kinematic_trajectory_pose_target_base.hpp>
 #include <duatic_trajectory/trajectory.hpp>
 
 namespace duatic::trajectory
@@ -61,7 +62,10 @@ template <typename ScalarT, typename TimestampT,
   requires std::convertible_to<typename KinematicTrajectorySettingsT::ScalarType, ScalarT>
 class KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT,
                                              KinematicTrajectorySettingsT>
-  : public KinematicTrajectoryBase<KinematicTrajectorySettingsT, geometry::KinematicOrder::Accel>
+  : public KinematicTrajectoryPoseTargetBase<
+        KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel,
+                                               KinematicVariableT, KinematicTrajectorySettingsT>,
+        ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT, KinematicTrajectorySettingsT>
 {
   /*
    * This class holds a private instance of the C1 (Twist-continuity) specialization (c1_ below) and
@@ -84,16 +88,21 @@ public:
   using TimestampType = TimestampT;
   using KinematicTrajectorySettingsType = KinematicTrajectorySettingsT;
 
-  using Base = KinematicTrajectoryBase<KinematicTrajectorySettingsType, geometry::KinematicOrder::Accel>;
-  using Base::continuity_order;
-  using Base::settings;
-
   // c1_'s own type (the Twist-continuity specialization of this same template family); see c1_ below.
   using C1 = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, geometry::KinematicOrder::Twist,
                                                     KinematicVariableT, KinematicTrajectorySettingsType>;
 
-  using Self = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, continuity_order, KinematicVariableT,
-                                                      KinematicTrajectorySettingsType>;
+  using Self = KinematicTrajectoryExponentialApproach<ScalarType, TimestampType, geometry::KinematicOrder::Accel,
+                                                      KinematicVariableT, KinematicTrajectorySettingsType>;
+
+  using Base = KinematicTrajectoryPoseTargetBase<Self, ScalarType, TimestampType, geometry::KinematicOrder::Accel,
+                                                 KinematicVariableT, KinematicTrajectorySettingsType>;
+  using Base::continuity_order;
+  using Base::settings;
+  // Un-hide Base's return-by-value evaluate<Order>(time): this class declares its own
+  // evaluate<Order>(time, out_state) below, which would otherwise hide the whole inherited
+  // "evaluate" overload set (member name hiding is per-name, not per-signature).
+  using Base::evaluate;
 
   template <geometry::KinematicOrder Order>
   using KinematicVariable = KinematicVariableT<ScalarType, Order>;
@@ -161,38 +170,8 @@ public:
     omega_a_ = determine_omega_a(v0, a1);
   }
 
-  inline void calculate_neutral(const UpdateStateType& in_update_state)
-  {
-    calculate(in_update_state, in_update_state.data().pose());
-  }
-
-  /*
-   * Replans starting from the 'other' trajectory's predicted state at in_timestamp (rather than an
-   * externally supplied UpdateStateType), so the caller only needs to provide the new target.
-   */
-  inline void update_from(const Self& other, const TimestampType& in_timestamp,
-                          const TrajectoryDescriptionType& in_description)
-  {
-    // there are no future trajectory data existing to be copied
-    calculate(UpdateStateType(in_timestamp,
-                              other.template evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)),
-              in_description);
-  }
-
-  /*
-   * Replans starting from this trajectory's own predicted state at in_timestamp (rather than an
-   * externally supplied UpdateStateType), so the caller only needs to provide the new target.
-   */
-  inline void update(const TimestampType& in_timestamp, const TrajectoryDescriptionType& in_description)
-  {
-    update_from(*this, in_timestamp, in_description);
-  }
-
-  inline void update_neutral(const TimestampType& in_timestamp)
-  {
-    calculate_neutral(
-        UpdateStateType(in_timestamp, evaluate<UpdateStateType::DataType::kinematic_order_depth>(in_timestamp)));
-  }
+  // calculate_neutral(), update_from(), update(), and update_neutral() are inherited from Base --
+  // see kinematic_trajectory_pose_target_base.hpp.
 
   template <geometry::KinematicOrder Order>
   inline void evaluate(const TimestampType& time, KinematicState<Order>& out_state) const
@@ -231,13 +210,8 @@ public:
                   "This kinematic depth has not yet been implemented, just do it.");
   }
 
-  template <geometry::KinematicOrder Order>
-  inline KinematicState<Order> evaluate(const TimestampType& time) const
-  {
-    KinematicState<Order> out_state;
-    evaluate<Order>(time, out_state);
-    return out_state;
-  }
+  // The return-by-value evaluate<Order>(time) overload is inherited from Base (brought into scope
+  // above via "using Base::evaluate;") -- see kinematic_trajectory_pose_target_base.hpp.
 
 private:
   /*
