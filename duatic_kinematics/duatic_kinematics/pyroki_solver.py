@@ -269,15 +269,21 @@ def _solve_ik_multi(
     joint_mask: jax.Array,
     prev_cfg: jax.Array,
     initial_cfg: jax.Array,
+    soft_indices: jax.Array,
+    soft_lower: jax.Array,
+    soft_upper: jax.Array,
+    soft_weights: jax.Array,
     self_collision_weight: float = 10.0,
     self_collision_margin: float = 0.01,
     limit_margin: float = 0.15,
     limit_margin_weight: float = 5.0,
+    ori_weight: float = 10.0,
 ) -> jax.Array:
     """Solve whole-body IK for multiple targets simultaneously (bimanual pattern).
 
     prev_cfg is used as the rest-pose regularization target.
     initial_cfg is used as the optimization starting point.
+    soft_* are the preferred ranges of _solve_ik, see _soft_range_residual.
     """
     JointVar = robot.joint_var_cls
 
@@ -296,7 +302,7 @@ def _solve_ik_multi(
             target_pose,
             target_link_indices,
             pos_weight=50.0,
-            ori_weight=10.0,
+            ori_weight=ori_weight,
             joint_mask=batched_mask,
         ),
         pk.costs.rest_cost(
@@ -321,6 +327,13 @@ def _solve_ik_multi(
             joint_mask,  # unbatched: bound to JointVar(0), not the batched pose var
             margin=limit_margin,
             weight=limit_margin_weight,
+        ),
+        _soft_range_cost(
+            JointVar(0),
+            soft_indices,
+            soft_lower,
+            soft_upper,
+            soft_weights,
         ),
     ]
 
@@ -437,6 +450,17 @@ class PyrokiIKSolver:
             elif (hi - lo) >= 2.0 * np.pi - 1e-6:
                 self._wraps[i] = True
 
+    def _seed_list(self, prev_cfg, seeds):
+        """Starting configurations, prev_cfg first — an acceptable result from it
+        short-circuits the rest, so extra seeds cost nothing when they are not needed."""
+        out, seen = [], set()
+        for cand in [prev_cfg] + list(seeds or []):
+            key = tuple(np.round(np.asarray(cand, dtype=np.float64), 4).tolist())
+            if key not in seen:
+                seen.add(key)
+                out.append(jnp.asarray(cand, dtype=jnp.float32))
+        return out
+
     def config_distance(self, q, q_ref):
         """Weighted joint-space distance for RANKING acceptable solutions, never fed
         into the solver. Wrapping joints are compared the short way round."""
@@ -546,15 +570,7 @@ class PyrokiIKSolver:
         prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
         rest_cfg_np = prev_cfg_np if rest_cfg is None else jnp.asarray(rest_cfg, dtype=jnp.float32)
 
-        # prev_cfg first, and an acceptable result from it short-circuits the rest —
-        # so a call that works today is unchanged, and extra seeds cost nothing.
-        seed_list, seen = [], set()
-        for cand in [prev_cfg_np] + list(seeds or []):
-            arr = np.asarray(cand, dtype=np.float64)
-            key = tuple(np.round(arr, 4).tolist())
-            if key not in seen:
-                seen.add(key)
-                seed_list.append(jnp.asarray(cand, dtype=jnp.float32))
+        seed_list = self._seed_list(prev_cfg_np, seeds)
 
         # Ranked against where the arm IS, not the reference posture: otherwise a
         # fallback swings to an equally valid but different shape and the controller
@@ -642,20 +658,34 @@ class PyrokiIKSolver:
         return chosen[1], chosen[2], chosen[3]
 
     def solve_multi(
-        self, target_link_names, target_positions, target_wxyzs, prev_cfg, joint_mask=None
+        self,
+        target_link_names,
+        target_positions,
+        target_wxyzs,
+        prev_cfg,
+        joint_mask=None,
+        rest_cfg=None,
+        soft_scale=1.0,
+        seeds=None,
+        prefer_near=None,
+        pos_err_thresh=None,
+        ori_err_thresh=None,
+        max_joint_step=None,
+        ori_weight=10.0,
     ):
         """
-        Solve IK for multiple targets simultaneously (whole-body).
+        Solve IK for several targets in ONE problem, so they may share joints.
 
-        All joints are optimized together to reach all targets at once.
-        Based on PyRoKi's bimanual IK pattern.
+        This is what solve() cannot do: two arms solved one after the other each pick
+        their own value for a torso they both hang from, and the second overwrites the
+        first. Here every target is a cost in the same least-squares problem.
 
-        Args:
+        Args beyond solve()'s, which all mean the same thing here:
             target_link_names: list of target link names
-            target_positions: (N, 3) array of target positions
-            target_wxyzs: (N, 4) array of target quaternions (wxyz)
-            prev_cfg: (n_actuated,) previous joint config — initial guess and rest pose
-            joint_mask: (n_actuated,) optional, 1.0=optimize, 0.0=lock. Default: all 1.0.
+            target_positions: (N, 3) target positions
+            target_wxyzs: (N, 4) target quaternions (wxyz)
+            ori_weight: orientation against position in the pose cost. The default keeps
+                the whole-body behaviour teleop has today; solve() uses 100.
 
         Returns:
             (cfg, [(pos_err, ori_err), ...]) — solution and per-target errors
@@ -665,37 +695,84 @@ class PyrokiIKSolver:
             joint_mask = jnp.ones(n, dtype=jnp.float32)
 
         target_link_indices = [self.robot.links.names.index(name) for name in target_link_names]
+        idx_arr = jnp.array(target_link_indices, dtype=jnp.int32)
+        wxyz_arr = jnp.array(target_wxyzs, dtype=jnp.float32)
+        pos_arr = jnp.array(target_positions, dtype=jnp.float32)
 
         prev_cfg_np = jnp.asarray(prev_cfg, dtype=jnp.float32)
-        initial_cfg_np = self._nudge_near_zero(prev_cfg_np)
+        rest_cfg_np = prev_cfg_np if rest_cfg is None else jnp.asarray(rest_cfg, dtype=jnp.float32)
+        mask_arr = jnp.array(joint_mask, dtype=jnp.float32)
 
-        cfg = _solve_ik_multi(
-            self.robot,
-            self.robot_coll,
-            jnp.array(target_link_indices, dtype=jnp.int32),
-            jnp.array(target_wxyzs, dtype=jnp.float32),
-            jnp.array(target_positions, dtype=jnp.float32),
-            jnp.array(joint_mask, dtype=jnp.float32),
-            jnp.array(prev_cfg_np, dtype=jnp.float32),
-            jnp.array(initial_cfg_np, dtype=jnp.float32),
-            self_collision_weight=self.self_collision_weight,
-            self_collision_margin=self.self_collision_margin,
+        seed_list = self._seed_list(prev_cfg_np, seeds)
+        reference = np.asarray(
+            prefer_near if prefer_near is not None else prev_cfg, dtype=np.float64
         )
-        cfg_np = jnp.array(cfg)
 
-        # Safety net: enforce locked joints stay exactly at prev_cfg
-        mask_arr = jnp.array(joint_mask)
-        cfg_np = jnp.where(mask_arr > 0.5, cfg_np, prev_cfg)
+        best = None  # (distance, cfg, errors, seed) among acceptable
+        fallback = None  # (score, cfg, errors, seed)
+        self.last_solve_info = {"seeds": len(seed_list), "chosen": None, "attempts": []}
 
-        errors = []
-        for i, idx in enumerate(target_link_indices):
-            pos_err, ori_err = _compute_pose_error(
+        for seed_i, seed in enumerate(seed_list):
+            cfg = _solve_ik_multi(
                 self.robot,
-                jnp.array(cfg_np, dtype=jnp.float32),
-                jnp.array(idx, dtype=jnp.int32),
-                jnp.array(target_wxyzs[i], dtype=jnp.float32),
-                jnp.array(target_positions[i], dtype=jnp.float32),
+                self.robot_coll,
+                idx_arr,
+                wxyz_arr,
+                pos_arr,
+                mask_arr,
+                jnp.array(rest_cfg_np, dtype=jnp.float32),
+                jnp.array(self._nudge_near_zero(seed), dtype=jnp.float32),
+                self._soft_idx,
+                self._soft_lower,
+                self._soft_upper,
+                self._soft_weights * float(soft_scale),
+                self_collision_weight=self.self_collision_weight,
+                self_collision_margin=self.self_collision_margin,
+                ori_weight=ori_weight,
             )
-            errors.append((float(pos_err), float(ori_err)))
+            # Safety net: enforce locked joints stay exactly at prev_cfg
+            cfg_out = np.array(jnp.where(mask_arr > 0.5, jnp.array(cfg), prev_cfg))
 
-        return np.array(cfg_np), errors
+            errors = []
+            for i, idx in enumerate(target_link_indices):
+                pos_err, ori_err = _compute_pose_error(
+                    self.robot,
+                    jnp.array(cfg_out, dtype=jnp.float32),
+                    jnp.array(idx, dtype=jnp.int32),
+                    jnp.array(target_wxyzs[i], dtype=jnp.float32),
+                    jnp.array(target_positions[i], dtype=jnp.float32),
+                )
+                errors.append((float(pos_err), float(ori_err)))
+
+            step = self.joint_step(
+                cfg_out,
+                np.asarray(prev_cfg, dtype=np.float64),
+                mask=np.asarray(joint_mask, dtype=np.float64),
+            )
+            # Every target has to be reached: a whole-body solve that satisfies one arm by
+            # moving the torso out from under the other has not solved anything.
+            ok = (
+                all(pos_err_thresh is None or p <= pos_err_thresh for p, _ in errors)
+                and all(ori_err_thresh is None or o <= ori_err_thresh for _, o in errors)
+                and (max_joint_step is None or step <= max_joint_step)
+            )
+            worst = max(p + o for p, o in errors)
+            self.last_solve_info["attempts"].append(
+                (seed_i, round(max(p for p, _ in errors), 4),
+                 round(max(o for _, o in errors), 4), round(step, 3), ok)
+            )
+
+            if ok and seed_i == 0:
+                self.last_solve_info["chosen"] = 0
+                return cfg_out, errors
+            if ok:
+                d = self.config_distance(cfg_out, reference)
+                if best is None or d < best[0]:
+                    best = (d, cfg_out, errors, seed_i)
+            elif fallback is None or worst < fallback[0]:
+                fallback = (worst, cfg_out, errors, seed_i)
+
+        chosen = best or fallback
+        self.last_solve_info["chosen"] = chosen[3]
+        self.last_solve_info["from"] = "acceptable" if best else "fallback"
+        return chosen[1], chosen[2]
