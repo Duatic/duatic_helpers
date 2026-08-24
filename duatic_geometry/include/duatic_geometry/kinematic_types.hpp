@@ -23,12 +23,17 @@
  */
 #pragma once
 
-#include <duatic_geometry/annotation.hpp>
-#include <duatic_geometry/annotation_stamped.hpp>
-#include <duatic_geometry/annotation_timed.hpp>
+#include <duatic_data_annotation/annotation.hpp>
+#include <duatic_data_annotation/annotation_stamped.hpp>
+#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/kinematic_state.hpp>
 
 #include <rclcpp/time.hpp>
+
+using duatic::data_annotation::Stamped;
+using duatic::data_annotation::StampedData;
+using duatic::data_annotation::Timed;
+using duatic::data_annotation::TimedData;
 
 namespace duatic::geometry
 {

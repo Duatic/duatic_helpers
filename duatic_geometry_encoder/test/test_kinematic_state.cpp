@@ -29,26 +29,26 @@
 #include <type_traits>
 
 #include <duatic_geometry/geometry.hpp>
-#include <duatic_geometry_msgs/duatic_geometry_msgs.hpp>
+#include <duatic_geometry_encoder/duatic_geometry_encoder.hpp>
 
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 namespace
 {
 
-using duatic::geometry::Accel3Dd;
 using duatic::geometry::Pose3Dd;
-using duatic::geometry::StateAccel3Dd;
+using duatic::geometry::Twist3Dd;
+using duatic::geometry::Accel3Dd;
 using duatic::geometry::StatePose3Dd;
 using duatic::geometry::StateTwist3Dd;
-using duatic::geometry::Twist3Dd;
+using duatic::geometry::StateAccel3Dd;
 
-using TimedStatePose = duatic::geometry::TimedData<StatePose3Dd, rclcpp::Time>;
-using TimedStateTwist = duatic::geometry::TimedData<StateTwist3Dd, rclcpp::Time>;
-using TimedStateAccel = duatic::geometry::TimedData<StateAccel3Dd, rclcpp::Time>;
-using StampedStatePose = duatic::geometry::StampedData<StatePose3Dd, rclcpp::Time>;
-using StampedStateTwist = duatic::geometry::StampedData<StateTwist3Dd, rclcpp::Time>;
-using StampedStateAccel = duatic::geometry::StampedData<StateAccel3Dd, rclcpp::Time>;
+using TimedStatePose = duatic::data_annotation::TimedData<StatePose3Dd, rclcpp::Time>;
+using TimedStateTwist = duatic::data_annotation::TimedData<StateTwist3Dd, rclcpp::Time>;
+using TimedStateAccel = duatic::data_annotation::TimedData<StateAccel3Dd, rclcpp::Time>;
+using StampedStatePose = duatic::data_annotation::StampedData<StatePose3Dd, rclcpp::Time>;
+using StampedStateTwist = duatic::data_annotation::StampedData<StateTwist3Dd, rclcpp::Time>;
+using StampedStateAccel = duatic::data_annotation::StampedData<StateAccel3Dd, rclcpp::Time>;
 
 // Same shape as ExpectEncodeDecodeRoundTrip in test_kinematic_variable.cpp, but compares
 // pose/twist/accel sub-variables (as many as the state's order depth provides) instead
@@ -74,10 +74,10 @@ void ExpectEncodeDecodeRoundTrip(const DataT& original)
     EXPECT_TRUE(decoded.accel().angular().isApprox(original.accel().angular()));
   }
 
-  if constexpr (duatic::geometry::is_timed_v<DataT>) {
+  if constexpr (duatic::data_annotation::is_timed_v<DataT>) {
     EXPECT_EQ(decoded.time(), original.time());
   }
-  if constexpr (duatic::geometry::is_stamped_v<DataT>) {
+  if constexpr (duatic::data_annotation::is_stamped_v<DataT>) {
     EXPECT_EQ(decoded.frame_id(), original.frame_id());
   }
 
@@ -216,7 +216,7 @@ TEST(KinematicStateEncodeDecode, StampedAccelDepthRoundTripsThroughStampedMessag
 }
 
 }  // namespace
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding
 
 int main(int argc, char** argv)
 {

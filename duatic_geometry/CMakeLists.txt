@@ -5,6 +5,7 @@ find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(duatic_data_annotation REQUIRED)
 
 # Header-only: the kinematic_variable_3d* stack is all templates over Eigen.
 add_library(${PROJECT_NAME} INTERFACE)
@@ -19,6 +20,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 target_link_libraries(${PROJECT_NAME} INTERFACE
   Eigen3::Eigen
   rclcpp::rclcpp
+  duatic_data_annotation::duatic_data_annotation
 )
 
 install(
@@ -33,7 +35,7 @@ install(
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories("include/${PROJECT_NAME}")
-ament_export_dependencies(Eigen3 rclcpp)
+ament_export_dependencies(Eigen3 rclcpp duatic_data_annotation)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

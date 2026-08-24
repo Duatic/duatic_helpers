@@ -29,22 +29,22 @@
 #include <type_traits>
 
 #include <duatic_geometry/geometry.hpp>
-#include <duatic_geometry_msgs/duatic_geometry_msgs.hpp>
+#include <duatic_geometry_encoder/duatic_geometry_encoder.hpp>
 
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 namespace
 {
 
-using duatic::geometry::Accel3Dd;
 using duatic::geometry::Pose3Dd;
-using duatic::geometry::StampedAccel3Dd;
-using duatic::geometry::StampedPose3Dd;
-using duatic::geometry::StampedTwist3Dd;
-using duatic::geometry::TimedAccel3Dd;
+using duatic::geometry::Twist3Dd;
+using duatic::geometry::Accel3Dd;
 using duatic::geometry::TimedPose3Dd;
 using duatic::geometry::TimedTwist3Dd;
-using duatic::geometry::Twist3Dd;
+using duatic::geometry::TimedAccel3Dd;
+using duatic::geometry::StampedPose3Dd;
+using duatic::geometry::StampedTwist3Dd;
+using duatic::geometry::StampedAccel3Dd;
 
 // Exercises both roundtrip directions: encode(original) -> message, decode(message)
 // -> decoded should reproduce the original data, and re-encoding decoded should
@@ -62,10 +62,10 @@ void ExpectEncodeDecodeRoundTrip(const DataT& original)
   EXPECT_TRUE(decoded.linear().isApprox(original.linear()));
   EXPECT_TRUE(decoded.angular().isApprox(original.angular()));
 
-  if constexpr (duatic::geometry::is_timed_v<DataT>) {
+  if constexpr (duatic::data_annotation::is_timed_v<DataT>) {
     EXPECT_EQ(decoded.time(), original.time());
   }
-  if constexpr (duatic::geometry::is_stamped_v<DataT>) {
+  if constexpr (duatic::data_annotation::is_stamped_v<DataT>) {
     EXPECT_EQ(decoded.frame_id(), original.frame_id());
   }
 
@@ -193,7 +193,7 @@ TEST(KinematicVariableEncodeDecode, StampedAccelRoundTripsThroughStampedMessage)
 }
 
 }  // namespace
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding
 
 int main(int argc, char** argv)
 {

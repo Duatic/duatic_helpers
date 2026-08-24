@@ -28,8 +28,8 @@
 #include <duatic_geometry/kinematic_order.hpp>
 #include <duatic_geometry/kinematic_state.hpp>
 
-#include <duatic_geometry_msgs/encoder.hpp>
-#include <duatic_geometry_msgs/encoder_kinematic_variable.hpp>
+#include <duatic_data_encoding/encoder.hpp>
+#include <duatic_geometry_encoder/encoder_kinematic_variable.hpp>
 
 #include <duatic_geometry_msgs/msg/state_accel.hpp>
 #include <duatic_geometry_msgs/msg/state_accel_stamped.hpp>
@@ -41,17 +41,11 @@
 using duatic::geometry::is_kinematic_state_v;
 using duatic::geometry::KinematicOrder;
 
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 
 template <KinematicOrder OrderDepth>
-struct KinematicStateMsgTypeHelper
-{
-  static_assert(OrderDepth == KinematicOrder::Pose ||  // line break
-                    OrderDepth == KinematicOrder::Twist || OrderDepth == KinematicOrder::Accel,
-                "No ROS 2 message mapping is defined for this KinematicState order depth: only Pose, Twist "
-                "and Accel depths are supported (StatePose/StateTwist/StateAccel).");
-};
+struct KinematicStateMsgTypeHelper;
 template <>
 struct KinematicStateMsgTypeHelper<KinematicOrder::Pose>
 {
@@ -71,9 +65,7 @@ struct KinematicStateMsgTypeHelper<KinematicOrder::Accel>
   using msg_stamped = duatic_geometry_msgs::msg::StateAccelStamped;
 };
 
-// template concretization for KinematicState: only order depths with a standard
-// mapping are supported (Pose, Twist, Accel), matching the KinematicVariable orders
-// that themselves have a ROS 2 message counterpart.
+// specialization for KinematicState
 template <typename T>
   requires is_kinematic_state_v<T>
 class FactoryEncoder<T>
@@ -92,6 +84,9 @@ public:
   template <typename MSG>
   static void encode(const T& data, MSG& message)
   {
+    static_assert(order_depth == KinematicOrder::Pose || order_depth == KinematicOrder::Twist ||
+                      order_depth == KinematicOrder::Accel,
+                  "FactoryEncoder<KinematicState>::encode() is not yet implemented for this KinematicOrder depth.");
     if constexpr (std::is_base_of_v<msg_stamped, MSG>) {
       encode(data, message.state);
     } else {
@@ -108,6 +103,9 @@ public:
   template <typename MSG>
   static void decode(const MSG& message, T& data)
   {
+    static_assert(order_depth == KinematicOrder::Pose || order_depth == KinematicOrder::Twist ||
+                      order_depth == KinematicOrder::Accel,
+                  "FactoryEncoder<KinematicState>::decode() is not yet implemented for this KinematicOrder depth.");
     if constexpr (std::is_base_of_v<msg_stamped, MSG>) {
       decode(message.state, data);
     } else {
@@ -122,4 +120,4 @@ public:
   }
 };
 
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding

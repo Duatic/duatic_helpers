@@ -3,23 +3,17 @@
 <package format="3">
   <name>duatic_geometry_msgs</name>
   <version>1.0.0</version>
-  <description>Message definitions, traits, and conversion functions for the duatic_geometry package</description>
+  <description>Message definitions for annotating geometry_msgs Pose/Twist/Accel with a duatic_geometry KinematicState order depth</description>
   <maintainer email="pvonwirth@duatic.com">Patrick Vonwirth</maintainer>
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
-
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
-  <test_depend>ament_cmake_gtest</test_depend>
 
   <build_depend>rosidl_default_generators</build_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
 
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
-  <depend>duatic_geometry</depend>
-  <depend>rclcpp</depend>
 
   <member_of_group>rosidl_interface_packages</member_of_group>
   <export>

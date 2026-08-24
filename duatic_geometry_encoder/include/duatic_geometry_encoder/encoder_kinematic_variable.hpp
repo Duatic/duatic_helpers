@@ -36,12 +36,12 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 
-#include <duatic_geometry_msgs/encoder.hpp>
+#include <duatic_data_encoding/encoder.hpp>
 
 using duatic::geometry::KinematicOrder;
 using duatic::geometry::KinematicVariable;
 
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 
 template <KinematicOrder Order>
@@ -65,7 +65,7 @@ struct KinematicVariableMsgTypeHelper<KinematicOrder::Accel>
   using msg_stamped = geometry_msgs::msg::AccelStamped;
 };
 
-// template concretization for KinematicVariable: only orders with
+// specialization for KinematicVariable: only orders with
 // a standard geometry_msgs analogue are supported (Pose, Twist, Accel).
 template <KinematicVariable T>
 class FactoryEncoder<T>
@@ -84,8 +84,11 @@ private:
       return message.pose;
     } else if constexpr (order == KinematicOrder::Twist) {
       return message.twist;
-    } else {
+    } else if constexpr (order == KinematicOrder::Accel) {
       return message.accel;
+    } else {
+      static_assert(order <= KinematicOrder::Accel, "FactoryEncoder<KinematicVariable>::unstamp() is not yet "
+                                                    "implemented for KinematicOrder higher than Accel");
     }
   }
 
@@ -141,4 +144,4 @@ public:
   }
 };
 
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding

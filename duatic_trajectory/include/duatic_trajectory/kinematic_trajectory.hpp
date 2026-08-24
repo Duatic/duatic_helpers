@@ -29,7 +29,7 @@
 #include <memory>
 #include <utility>
 
-#include <duatic_geometry/annotation.hpp>
+#include <duatic_data_annotation/annotation.hpp>
 #include <duatic_geometry/kinematic_order.hpp>
 #include <duatic_geometry/kinematic_state.hpp>
 
@@ -139,7 +139,7 @@ concept KinematicTrajectory =
       requires is_kinematic_trajectory_settings_v<typename T::KinematicTrajectorySettingsType>;
       requires std::convertible_to<typename T::KinematicTrajectorySettingsType::ScalarType, typename T::ScalarType>;
       requires std::constructible_from<T, std::shared_ptr<typename T::KinematicTrajectorySettingsType>>;
-      requires geometry::is_timed_v<typename T::UpdateStateType>;
+      requires data_annotation::is_timed_v<typename T::UpdateStateType>;
       requires geometry::is_kinematic_state_v<typename T::UpdateStateType::DataType>;
 
       // the continuity order this trajectory guarantees at replan boundaries (e.g. Twist == C1);

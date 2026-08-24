@@ -24,7 +24,7 @@
 #pragma once
 
 #include <iostream>
-namespace duatic::geometry
+namespace duatic::data_annotation
 {
 
 template <typename DataT, typename TimestampT>
@@ -115,4 +115,4 @@ inline std::ostream& operator<<(std::ostream& os, const TimedData<DataT, Timesta
   return os;
 }
 
-}  // namespace duatic::geometry
+}  // namespace duatic::data_annotation

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>duatic_geometry_encoder</name>
+  <version>1.0.0</version>
+  <description>FactoryEncoder specializations converting duatic_geometry's KinematicVariable/KinematicState types to/from their ROS 2 message counterparts</description>
+  <maintainer email="pvonwirth@duatic.com">Patrick Vonwirth</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <depend>geometry_msgs</depend>
+  <depend>duatic_geometry</depend>
+  <depend>duatic_geometry_msgs</depend>
+  <depend>duatic_data_encoding</depend>
+  <depend>rclcpp</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

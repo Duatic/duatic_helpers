@@ -128,7 +128,7 @@ public:
   using TwistType = KinematicVariable<geometry::KinematicOrder::Twist>;
   using TwistStateType = KinematicState<geometry::KinematicOrder::Twist>;
 
-  using UpdateStateType = geometry::TimedData<TwistStateType, TimestampType>;
+  using UpdateStateType = data_annotation::TimedData<TwistStateType, TimestampType>;
 
   using TrajectoryDescriptionType = PoseType;
 

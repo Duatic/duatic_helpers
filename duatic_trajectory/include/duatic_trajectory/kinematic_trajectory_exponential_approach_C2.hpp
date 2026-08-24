@@ -137,7 +137,7 @@ public:
   using AccelType = KinematicVariable<geometry::KinematicOrder::Accel>;
   using AccelStateType = KinematicState<geometry::KinematicOrder::Accel>;
 
-  using UpdateStateType = geometry::TimedData<AccelStateType, TimestampType>;
+  using UpdateStateType = data_annotation::TimedData<AccelStateType, TimestampType>;
 
   using TrajectoryDescriptionType = PoseType;
 

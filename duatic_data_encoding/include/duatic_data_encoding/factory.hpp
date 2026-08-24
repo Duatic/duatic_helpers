@@ -24,23 +24,20 @@
 #pragma once
 
 #include <type_traits>
-#include <duatic_geometry/annotation.hpp>
-#include <duatic_geometry_msgs/encoder.hpp>
+#include <duatic_data_annotation/annotation.hpp>
+#include <duatic_data_encoding/encoder.hpp>
 
-using duatic::geometry::is_stamped_v;
-using duatic::geometry::is_timed_v;
+using duatic::data_annotation::is_stamped_v;
+using duatic::data_annotation::is_timed_v;
 
-// Kept as the flat `duatic_geometry_msgs` namespace (matching the rosidl-generated
-// `duatic_geometry_msgs::msg::*` types living in the same package) rather than the
-// `duatic::geometry_msgs` nesting used elsewhere, so that references to the unrelated,
-// external `::geometry_msgs` package never get shadowed by our own namespace.
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 
 // std::conditional_t substitutes both branches unconditionally, so it can't be used
 // directly with typename U::DataType (U may not have one); dispatch via specialization
-// instead. Must live at namespace scope, not nested in Factory<T>: see
-// KinematicVariableMsgTypeHelper in encoder_kinematic_variable.hpp for the same reason.
+// instead. Must live at namespace scope, not nested in Factory<T>: specializations of
+// FactoryEncoder added by other packages (e.g. KinematicVariableMsgTypeHelper in
+// duatic_geometry_encoder) rely on the same namespace-scope pattern.
 template <typename U, bool is_annotated>
 struct FactoryDataTypeHelper
 {
@@ -55,13 +52,13 @@ struct FactoryDataTypeHelper<U, true>
 // ---------------------------------------------------------------------------
 // Factory
 //
-// Converts between a duatic_geometry data type T and its ROS 2 message
-// counterparts: `msg` (no header) and `msg_stamped` (with header). T may be a
-// plain KinematicVariable, a KinematicState,
-// or either of those wrapped in TimedData<> / StampedData<> --
-// whether T satisfies the Timed/Stamped concepts is evaluated automatically and,
-// if so, decode()/encode() additionally transfer the message header's stamp (and
-// frame_id, if stamped).
+// Converts between a data type T and its ROS 2 message counterparts: `msg`
+// (no header) and `msg_stamped` (with header), via a FactoryEncoder<T>
+// specialization. T may be a plain type or that type wrapped in
+// TimedData<> / StampedData<> -- whether T satisfies the Timed/Stamped
+// concepts is evaluated automatically and, if so, decode()/encode()
+// additionally transfer the message header's stamp (and frame_id, if
+// stamped).
 // ---------------------------------------------------------------------------
 template <typename T, template <typename> typename EncoderT = FactoryEncoder>
 class Factory
@@ -127,4 +124,4 @@ public:
   }
 };
 
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding

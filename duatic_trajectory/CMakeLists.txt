@@ -3,6 +3,7 @@ project(duatic_trajectory)
 
 find_package(ament_cmake REQUIRED)
 find_package(duatic_geometry REQUIRED)
+find_package(duatic_data_annotation REQUIRED)
 find_package(rclcpp REQUIRED)
 
 # Header-only: the (kinematic_)trajectory* stack is all templates over duatic_geometry.
@@ -17,6 +18,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
   duatic_geometry::duatic_geometry
+  duatic_data_annotation::duatic_data_annotation
   rclcpp::rclcpp
 )
 
@@ -32,7 +34,7 @@ install(
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories("include/${PROJECT_NAME}")
-ament_export_dependencies(duatic_geometry rclcpp)
+ament_export_dependencies(duatic_geometry duatic_data_annotation rclcpp)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

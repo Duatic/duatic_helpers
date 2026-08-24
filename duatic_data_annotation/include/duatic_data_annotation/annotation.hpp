@@ -23,40 +23,51 @@
  */
 #pragma once
 
-#include <duatic_geometry/annotation.hpp>
+#include <concepts>
+#include <string>
+#include <type_traits>
 
-namespace duatic_geometry_msgs
+namespace duatic::data_annotation
 {
 
-// An Encoder must expose the `msg`/`msg_stamped` ROS 2
-// message types (without/with header) that the type's fields are encoded into / decoded
-// from, thus matching encode()/decode() static functions accepting either message
+// Satisfied by TimedData<DataT, TimestampT> (see annotation_timed.hpp) and anything else exposing the same
+// DataType/TimestampType typenames and time()/data() accessors.
 template <typename T>
-concept Encoder =
-    !duatic::geometry::is_timed_v<typename T::DataType> && !duatic::geometry::is_stamped_v<typename T::DataType> &&
-    requires(const T::DataType& const_data, T::DataType& data, typename T::msg& message,
-             const typename T::msg& const_message, typename T::msg_stamped& message_stamped,
-             const typename T::msg_stamped& const_message_stamped) {
-      typename T::DataType;
-      typename T::msg;
-      typename T::msg_stamped;
+concept Timed = requires(T& mutable_value, const T& const_value) {
+  typename T::DataType;
+  typename T::TimestampType;
 
-      T::encode(const_data, message);
-      T::encode(const_data, message_stamped);
-      T::decode(const_message, data);
-      T::decode(const_message_stamped, data);
-    };  // NOLINT(readability/braces)
+  { mutable_value.time() } -> std::same_as<typename T::TimestampType&>;
+  { const_value.time() } -> std::same_as<const typename T::TimestampType&>;
 
-// forward declaration for later concretizations
+  { mutable_value.data() } -> std::same_as<typename T::DataType&>;
+  { const_value.data() } -> std::same_as<const typename T::DataType&>;
+};  // NOLINT(readability/braces)
+
+// Satisfied by StampedData<DataT, TimestampT> (see annotation_stamped.hpp) and anything else additionally
+// exposing a frame_id() accessor on top of the Timed interface.
 template <typename T>
-class FactoryEncoder
+concept Stamped = Timed<T> && requires(T& mutable_value, const T& const_value) {
+  { mutable_value.frame_id() } -> std::same_as<std::string&>;
+  { const_value.frame_id() } -> std::same_as<const std::string&>;
+};  // NOLINT(readability/braces)
+
+// trait helpers
+
+template <typename T>
+struct is_timed : std::bool_constant<Timed<T>>
 {
-  static_assert(false, "duatic_geometry_msgs::FactoryEncoder<T> is not defined for this type. T must be a "
-                       "duatic::geometry::KinematicVariable or duatic::geometry::KinematicState.");
 };
 
-}  // namespace duatic_geometry_msgs
+template <typename T>
+constexpr bool is_timed_v = is_timed<T>::value;
 
-// include template instantiations
-#include <duatic_geometry_msgs/encoder_kinematic_state.hpp>
-#include <duatic_geometry_msgs/encoder_kinematic_variable.hpp>
+template <typename T>
+struct is_stamped : std::bool_constant<Stamped<T>>
+{
+};
+
+template <typename T>
+constexpr bool is_stamped_v = is_stamped<T>::value;
+
+}  // namespace duatic::data_annotation

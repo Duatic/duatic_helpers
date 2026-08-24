@@ -1,17 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>duatic_trajectory</name>
+  <name>duatic_data_encoding</name>
   <version>0.0.0</version>
-  <description>Trajectory generation and evaluation built on top of duatic_geometry.</description>
-  <maintainer email="pvonwirth@duatic.de">Patrick Vonwirth</maintainer>
-  <license>BSD3-Clause</license>
+  <description>Generic Factory/FactoryEncoder machinery converting annotated data types to/from ROS 2 messages, independent of any particular data domain.</description>
+  <maintainer email="pvonwirth@duatic.com">Patrick Vonwirth</maintainer>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>duatic_geometry</depend>
   <depend>duatic_data_annotation</depend>
-  <depend>rclcpp</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -25,9 +25,9 @@
 
 #include <ostream>
 #include <string>
-#include <duatic_geometry/annotation_timed.hpp>
+#include <duatic_data_annotation/annotation_timed.hpp>
 
-namespace duatic::geometry
+namespace duatic::data_annotation
 {
 
 template <typename DataT, typename TimestampT>
@@ -87,4 +87,4 @@ inline std::ostream& operator<<(std::ostream& os, const StampedData<DataT, TimeS
   return os;
 }
 
-}  // namespace duatic::geometry
+}  // namespace duatic::data_annotation

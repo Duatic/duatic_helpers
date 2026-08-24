@@ -23,9 +23,9 @@
  */
 #pragma once
 
-#include <duatic_geometry_msgs/factory.hpp>
+#include <duatic_data_encoding/factory.hpp>
 
-namespace duatic_geometry_msgs
+namespace duatic::data_encoding
 {
 
 // The ROS 2 message types Factory<T> converts T to/from, without and with header.
@@ -47,4 +47,4 @@ void decode(const MSG& message, T& data)
   Factory<T>::decode(message, data);
 }
 
-}  // namespace duatic_geometry_msgs
+}  // namespace duatic::data_encoding
