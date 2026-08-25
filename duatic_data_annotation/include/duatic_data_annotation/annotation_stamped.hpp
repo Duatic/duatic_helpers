@@ -25,6 +25,9 @@
 
 #include <ostream>
 #include <string>
+#include <variant>
+
+#include <duatic_data_annotation/annotation.hpp>
 #include <duatic_data_annotation/annotation_timed.hpp>
 
 namespace duatic::data_annotation
@@ -61,17 +64,6 @@ public:
     return frame_;
   }
 
-  Self& setFrameNeutral()
-  {
-    frame_.clear();
-    return *this;
-  }
-  Self& setNeutral()
-  {
-    TimedData<DataType, TimestampType>::setNeutral();
-    return setFrameNeutral();
-  }
-
 private:
   std::string frame_;
 };
@@ -86,5 +78,9 @@ inline std::ostream& operator<<(std::ostream& os, const StampedData<DataT, TimeS
      << " - Data: " << static_cast<const DataT&>(stamped);
   return os;
 }
+
+// Compile-time verification: StampedData<DataT, TimestampT> must satisfy the Stamped concept it exists to implement.
+static_assert(Stamped<StampedData<std::monostate, double>>,
+              "StampedData<DataT, TimestampT> does not satisfy the Stamped concept");
 
 }  // namespace duatic::data_annotation

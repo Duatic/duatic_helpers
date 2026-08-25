@@ -34,6 +34,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>
 #include <duatic_trajectory/kinematic_trajectory_base.hpp>
@@ -86,8 +87,8 @@ template <typename ScalarT, typename TimestampT,
 class KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT,
                                              KinematicTrajectorySettingsT>
   : public KinematicTrajectoryPoseTargetBase<
-        KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel,
-                                               KinematicVariableT, KinematicTrajectorySettingsT>,
+        KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT,
+                                               KinematicTrajectorySettingsT>,
         ScalarT, TimestampT, geometry::KinematicOrder::Accel, KinematicVariableT, KinematicTrajectorySettingsT>
 {
   /*
@@ -420,9 +421,6 @@ private:
     return this->settings().omega_max();
   }
 
-  // The Twist-continuity trajectory this class patches an additive acceleration-matching correction
-  // on top of; see the derivation above. Constructed sharing the same settings object as this
-  // class' own Base (see the constructor above).
   C1 c1_;
   TwistType D_;
   ScalarType omega_a_;

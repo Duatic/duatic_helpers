@@ -38,7 +38,7 @@ namespace duatic::data_encoding
 // instead. Must live at namespace scope, not nested in Factory<T>: specializations of
 // FactoryEncoder added by other packages (e.g. KinematicVariableMsgTypeHelper in
 // duatic_geometry_encoder) rely on the same namespace-scope pattern.
-template <typename U, bool is_annotated>
+template <typename U, bool requires_msg_stamped_type>
 struct FactoryDataTypeHelper
 {
   using type = U;
@@ -67,17 +67,17 @@ public:
   static constexpr bool is_timed = is_timed_v<T>;
   static constexpr bool is_stamped = is_stamped_v<T>;
 
-  static constexpr bool is_annotated = is_timed || is_stamped;
+  static constexpr bool requires_msg_stamped_type = is_timed || is_stamped;
 
 private:
-  using DataType = typename FactoryDataTypeHelper<T, is_annotated>::type;
+  using DataType = typename FactoryDataTypeHelper<T, requires_msg_stamped_type>::type;
 
   using EncoderImpl = EncoderT<DataType>;
   static_assert(Encoder<EncoderImpl>);
 
 public:
   using msg_stamped = typename EncoderImpl::msg_stamped;
-  using msg = std::conditional_t<is_annotated, msg_stamped, typename EncoderImpl::msg>;
+  using msg = std::conditional_t<requires_msg_stamped_type, msg_stamped, typename EncoderImpl::msg>;
 
   template <typename MSG>
     requires std::is_base_of_v<msg, MSG> || std::is_base_of_v<msg_stamped, MSG>
@@ -94,7 +94,7 @@ public:
       }
     }
     // data handling
-    if constexpr (is_annotated) {
+    if constexpr (requires_msg_stamped_type) {
       EncoderImpl::encode(data.data(), msg);
     } else {
       EncoderImpl::encode(data, msg);
@@ -116,7 +116,7 @@ public:
       }
     }
     // data handling
-    if constexpr (is_annotated) {
+    if constexpr (requires_msg_stamped_type) {
       EncoderImpl::decode(msg, data.data());
     } else {
       EncoderImpl::decode(msg, data);

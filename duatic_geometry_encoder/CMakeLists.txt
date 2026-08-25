@@ -48,12 +48,17 @@ ament_export_dependencies(geometry_msgs duatic_geometry duatic_geometry_msgs dua
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  # only the tests construct TimedData/StampedData directly (to build round-trip
+  # fixtures), the library itself only needs the Timed/Stamped traits via
+  # duatic_data_encoding -- so this stays a test-only dependency.
+  find_package(duatic_data_annotation REQUIRED)
 
   ament_add_gtest(test_kinematic_variable
     test/test_kinematic_variable.cpp
   )
   target_link_libraries(test_kinematic_variable
     ${PROJECT_NAME}
+    duatic_data_annotation::duatic_data_annotation
   )
 
   ament_add_gtest(test_kinematic_state
@@ -61,6 +66,7 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_kinematic_state
     ${PROJECT_NAME}
+    duatic_data_annotation::duatic_data_annotation
   )
 endif()
 

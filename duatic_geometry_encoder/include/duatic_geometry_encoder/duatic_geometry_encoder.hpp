@@ -28,3 +28,32 @@
 #include <duatic_geometry_encoder/encoder_kinematic_state.hpp>
 #include <duatic_geometry_encoder/encoder_kinematic_variable.hpp>
 #include <duatic_data_encoding/duatic_data_encoding.hpp>
+
+// Compile-time verification: a plain KinematicVariable and a plain KinematicState must each compile
+// against the generic encode()/decode() facade in duatic_data_encoding.hpp, both with and without a
+// header (msg_t/msg_stamped_t)
+#include <duatic_geometry/geometry.hpp>
+
+static_assert(
+    requires(const duatic::geometry::Pose3Dd& data, duatic::geometry::Pose3Dd& mutable_data,
+             duatic::data_encoding::msg_t<duatic::geometry::Pose3Dd>& message,
+             duatic::data_encoding::msg_stamped_t<duatic::geometry::Pose3Dd>& message_stamped) {
+      duatic::data_encoding::encode(data, message);
+      duatic::data_encoding::encode(data, message_stamped);
+      duatic::data_encoding::decode(message, mutable_data);
+      duatic::data_encoding::decode(message_stamped, mutable_data);
+    },
+    "a KinematicVariable (duatic::geometry::Pose3Dd) does not compile against the generic "
+    "duatic::data_encoding encode()/decode() functions");
+
+static_assert(
+    requires(const duatic::geometry::StatePose3Dd& data, duatic::geometry::StatePose3Dd& mutable_data,
+             duatic::data_encoding::msg_t<duatic::geometry::StatePose3Dd>& message,
+             duatic::data_encoding::msg_stamped_t<duatic::geometry::StatePose3Dd>& message_stamped) {
+      duatic::data_encoding::encode(data, message);
+      duatic::data_encoding::encode(data, message_stamped);
+      duatic::data_encoding::decode(message, mutable_data);
+      duatic::data_encoding::decode(message_stamped, mutable_data);
+    },
+    "a KinematicState (duatic::geometry::StatePose3Dd) does not compile against the generic "
+    "duatic::data_encoding encode()/decode() functions");

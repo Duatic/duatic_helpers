@@ -28,6 +28,10 @@
 
 #include <type_traits>
 
+#include <rclcpp/time.hpp>
+
+#include <duatic_data_annotation/annotation_stamped.hpp>
+#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_geometry_encoder/duatic_geometry_encoder.hpp>
 

@@ -23,17 +23,7 @@
  */
 #pragma once
 
-#include <duatic_data_annotation/annotation.hpp>
-#include <duatic_data_annotation/annotation_stamped.hpp>
-#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/kinematic_state.hpp>
-
-#include <rclcpp/time.hpp>
-
-using duatic::data_annotation::Stamped;
-using duatic::data_annotation::StampedData;
-using duatic::data_annotation::Timed;
-using duatic::data_annotation::TimedData;
 
 namespace duatic::geometry
 {
@@ -89,61 +79,5 @@ using StateTwist3Dd = StateTwist3D<double>;
 using StateAccel3Dd = StateAccel3D<double>;
 using StateToJerk3Dd = StateToJerk3D<double>;
 using StateToSnap3Dd = StateToSnap3D<double>;
-
-// Timed templates and types
-template <typename ScalarT, KinematicOrder Order, typename TimestampT = rclcpp::Time>
-using TimedKinematicVariable3DT = TimedData<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
-
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using TimedPose3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Pose, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using TimedTwist3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Twist, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using TimedAccel3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Accel, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using TimedJerk3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Jerk, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using TimedSnap3D = TimedKinematicVariable3DT<ScalarT, KinematicOrder::Snap, TimestampT>;
-
-using TimedPose3Dd = TimedPose3D<double>;
-using TimedTwist3Dd = TimedTwist3D<double>;
-using TimedAccel3Dd = TimedAccel3D<double>;
-using TimedJerk3Dd = TimedJerk3D<double>;
-using TimedSnap3Dd = TimedSnap3D<double>;
-
-// Assert concept compliance
-static_assert(Timed<TimedPose3Dd>);
-static_assert(Timed<TimedTwist3Dd>);
-static_assert(Timed<TimedAccel3Dd>);
-static_assert(Timed<TimedJerk3Dd>);
-static_assert(Timed<TimedSnap3Dd>);
-
-// Stamped templates and types
-template <typename ScalarT, KinematicOrder Order, typename TimestampT = rclcpp::Time>
-using StampedKinematicVariable3DT = StampedData<KinematicVariable3DT<ScalarT, Order>, TimestampT>;
-
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using StampedPose3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Pose, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using StampedTwist3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Twist, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using StampedAccel3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Accel, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using StampedJerk3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Jerk, TimestampT>;
-template <typename ScalarT, typename TimestampT = rclcpp::Time>
-using StampedSnap3D = StampedKinematicVariable3DT<ScalarT, KinematicOrder::Snap, TimestampT>;
-
-using StampedPose3Dd = StampedPose3D<double>;
-using StampedTwist3Dd = StampedTwist3D<double>;
-using StampedAccel3Dd = StampedAccel3D<double>;
-using StampedJerk3Dd = StampedJerk3D<double>;
-using StampedSnap3Dd = StampedSnap3D<double>;
-
-// Assert concept compliance
-static_assert(Stamped<StampedPose3Dd>);
-static_assert(Stamped<StampedTwist3Dd>);
-static_assert(Stamped<StampedAccel3Dd>);
-static_assert(Stamped<StampedJerk3Dd>);
-static_assert(Stamped<StampedSnap3Dd>);
 
 }  // namespace duatic::geometry

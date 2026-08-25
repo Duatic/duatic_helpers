@@ -28,6 +28,10 @@
 
 #include <type_traits>
 
+#include <rclcpp/time.hpp>
+
+#include <duatic_data_annotation/annotation_stamped.hpp>
+#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_geometry_encoder/duatic_geometry_encoder.hpp>
 
@@ -39,12 +43,13 @@ namespace
 using duatic::geometry::Pose3Dd;
 using duatic::geometry::Twist3Dd;
 using duatic::geometry::Accel3Dd;
-using duatic::geometry::TimedPose3Dd;
-using duatic::geometry::TimedTwist3Dd;
-using duatic::geometry::TimedAccel3Dd;
-using duatic::geometry::StampedPose3Dd;
-using duatic::geometry::StampedTwist3Dd;
-using duatic::geometry::StampedAccel3Dd;
+
+using TimedPose3Dd = duatic::data_annotation::TimedData<Pose3Dd, rclcpp::Time>;
+using TimedTwist3Dd = duatic::data_annotation::TimedData<Twist3Dd, rclcpp::Time>;
+using TimedAccel3Dd = duatic::data_annotation::TimedData<Accel3Dd, rclcpp::Time>;
+using StampedPose3Dd = duatic::data_annotation::StampedData<Pose3Dd, rclcpp::Time>;
+using StampedTwist3Dd = duatic::data_annotation::StampedData<Twist3Dd, rclcpp::Time>;
+using StampedAccel3Dd = duatic::data_annotation::StampedData<Accel3Dd, rclcpp::Time>;
 
 // Exercises both roundtrip directions: encode(original) -> message, decode(message)
 // -> decoded should reproduce the original data, and re-encoding decoded should

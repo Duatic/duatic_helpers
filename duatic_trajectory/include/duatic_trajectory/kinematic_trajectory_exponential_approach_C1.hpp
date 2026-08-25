@@ -34,6 +34,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <duatic_data_annotation/annotation_timed.hpp>
 #include <duatic_geometry/geometry.hpp>
 #include <duatic_trajectory/kinematic_trajectory.hpp>
 #include <duatic_trajectory/kinematic_trajectory_base.hpp>
@@ -88,8 +89,8 @@ template <typename ScalarT, typename TimestampT,
 class KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist, KinematicVariableT,
                                              KinematicTrajectorySettingsT>
   : public KinematicTrajectoryPoseTargetBase<
-        KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist,
-                                               KinematicVariableT, KinematicTrajectorySettingsT>,
+        KinematicTrajectoryExponentialApproach<ScalarT, TimestampT, geometry::KinematicOrder::Twist, KinematicVariableT,
+                                               KinematicTrajectorySettingsT>,
         ScalarT, TimestampT, geometry::KinematicOrder::Twist, KinematicVariableT, KinematicTrajectorySettingsT>
 {
   /*
@@ -196,7 +197,7 @@ public:
 
 private:
   /*
-   * assumed the internal variable A_ has already benn determined !
+   * assumed the internal variable A_ has already been determined !
    */
   inline ScalarType determine_omega(const TwistType& v_zero) const
   {
@@ -300,7 +301,6 @@ private:
     return std::min(omega_zero, omega_interior);
   }
 
-private:
   TimestampType start_time_;
   PoseType goal_;
   TwistType A_, B_;

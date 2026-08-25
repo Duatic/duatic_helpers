@@ -24,6 +24,10 @@
 #pragma once
 
 #include <iostream>
+#include <variant>
+
+#include <duatic_data_annotation/annotation.hpp>
+
 namespace duatic::data_annotation
 {
 
@@ -66,21 +70,6 @@ public:
     return *this;
   }
 
-  Self& setTimeNeutral()
-  {
-    time_ = TimestampType();
-    return *this;
-  }
-  Self& setDataNeutral()
-  {
-    DataType::setNeutral();
-    return *this;
-  }
-  Self& setNeutral()
-  {
-    return setTimeNeutral().setDataNeutral();
-  }
-
   // Not every TimestampType is itself streamable (e.g. rclcpp::Time has no operator<<); fall back to
   // printing its .seconds() (available on rclcpp::Time/rclcpp::Duration-like types) instead of failing
   // to compile entirely. Shared by TimedData's and StampedData's operator<<.
@@ -114,5 +103,9 @@ inline std::ostream& operator<<(std::ostream& os, const TimedData<DataT, Timesta
   os << std::endl << " - Data: " << static_cast<const DataT&>(stamped);
   return os;
 }
+
+// Compile-time verification: TimedData<DataT, TimestampT> must satisfy the Timed concept it exists to implement.
+static_assert(Timed<TimedData<std::monostate, double>>,
+              "TimedData<DataT, TimestampT> does not satisfy the Timed concept");
 
 }  // namespace duatic::data_annotation
