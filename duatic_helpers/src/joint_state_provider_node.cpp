@@ -112,6 +112,16 @@ static void on_joint_state_request(const GetJointStates::Request::SharedPtr& req
 // Regular update at which the full current state is republished
 static void on_update()
 {
+  // An empty JointState carries no information, and a consumer that replaces its cache
+  // with the message contents is wiped by every one of them. A silent provider is also
+  // the clearer signal: a stream of nothing looks like a working publisher.
+  if (joint_states_.empty()) {
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 10000,
+                         "No joint states received from any producer yet — publishing "
+                         "nothing instead of an empty message.");
+    return;
+  }
+
   sensor_msgs::msg::JointState msg;
   msg.header.stamp = node_->get_clock()->now();
   for (const auto& elem : joint_states_) {
