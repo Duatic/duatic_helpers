@@ -758,8 +758,13 @@ class PyrokiIKSolver:
             )
             worst = max(p + o for p, o in errors)
             self.last_solve_info["attempts"].append(
-                (seed_i, round(max(p for p, _ in errors), 4),
-                 round(max(o for _, o in errors), 4), round(step, 3), ok)
+                (
+                    seed_i,
+                    round(max(p for p, _ in errors), 4),
+                    round(max(o for _, o in errors), 4),
+                    round(step, 3),
+                    ok,
+                )
             )
 
             if ok and seed_i == 0:
