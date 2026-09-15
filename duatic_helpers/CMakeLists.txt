@@ -31,13 +31,6 @@ if(BUILD_TESTING)
   )
 endif()
 
-
-
-## And the c++ part
-find_package(rclcpp REQUIRED)
-find_package(duatic_helper_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
-
 ament_package(
   CONFIG_EXTRAS "duatic_helpers-extras.cmake"
 )
