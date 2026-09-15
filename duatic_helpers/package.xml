@@ -15,11 +15,7 @@
   <depend>rclpy</depend>
   <depend>python3-yaml</depend>
   <depend>python3-types-pyyaml</depend>
-  <depend>rclcpp</depend>
-  <depend>duatic_helper_msgs</depend>
   <depend>sensor_msgs</depend>
-
-
 
   <build_depend>ament_cmake_python</build_depend>
 

@@ -22,6 +22,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import re
+import time
+import xml.etree.ElementTree as ET
 
 import rclpy
 from rclpy.node import Node
@@ -39,6 +41,7 @@ class DuaticRobotsHelper:
         self._joint_states = {}
         self._robot = {}
         self._robot_count = 0
+        self._expected_joints = set()
 
         self._end_effector_keywords = (
             "finger",
@@ -74,6 +77,7 @@ class DuaticRobotsHelper:
         """Try to identify robot structure from URDF."""
         urdf_raw = self.param_helper.get_urdf()
         if urdf_raw:
+            self._expected_joints = self._movable_joint_names(urdf_raw)
             # Strip XML comments to ensure keyword matching only hits joint/link names
             urdf = re.sub(r"<!--.*?-->", "", urdf_raw, flags=re.DOTALL).lower()
             # Priority based identification to avoid mis-detecting rovers with arm metadata
@@ -97,20 +101,47 @@ class DuaticRobotsHelper:
             else:
                 self.robot_structure = "generic"
                 self.node.get_logger().info("Identified robot structure: Generic")
+        else:
+            self.node.get_logger().warning(
+                "Could not read robot_description: without it there is no expected joint "
+                "set, so wait_for_robot() cannot confirm the robot is complete."
+            )
+
+    def _movable_joint_names(self, urdf_raw):
+        """The joint names a complete /joint_states is expected to carry.
+
+        Listed by type rather than by exclusion: revolute and continuous are the joints
+        that report one position on the topic. Fixed has no state at all, floating and
+        planar have several degrees of freedom and no single position, and a mimic joint
+        is computed from the joint it follows rather than measured. An unparsable URDF
+        yields an empty set, which wait_for_robot() reports as a check it could not run.
+        """
+        try:
+            root = ET.fromstring(urdf_raw)
+        except ET.ParseError as e:
+            self.node.get_logger().warning(f"Could not parse the URDF to list its joints: {e}")
+            return set()
+
+        # Direct children only: <transmission> and <ros2_control> blocks nest their own
+        # <joint> elements, and those are wiring, not joints to wait for.
+        names = set()
+        for joint in root.findall("joint"):
+            name = joint.get("name")
+            if not name or joint.get("type") not in ("revolute", "continuous", "prismatic"):
+                continue
+            if joint.find("mimic") is not None:
+                continue
+            names.add(name)
+        return names
+
+    def _missing_joints(self):
+        """URDF joints not yet seen on /joint_states."""
+        return self._expected_joints - set(self._joint_states)
 
     def _joint_state_callback(self, msg):
-        """Update the cache from a possibly partial JointState, and detect robots once.
+        """Update the JointState cache and robot type.
 
-        Contract: merges rather than replaces, ignores messages whose arrays are
-        inconsistent, and never leaves a partially updated cache visible.
-
-        The cache therefore only grows: a publisher that goes away leaves its last values
-        behind. Deliberate, and safe here because robot detection is a one-shot — the
-        callback below rebuilds it only while _robot_count is 0, and every external caller
-        reads that frozen result through get_component_names(). Stale joints cannot
-        produce stale robots. Expiring them would need a per-joint timestamp; going back
-        to replacing the cache would trade visible ghosts for joints that vanish
-        sporadically depending on publisher timing, which is far harder to debug.
+        The cache only grows: a publisher that goes away leaves its last values behind.
         """
         if not msg.position:
             # Legal per sensor_msgs/JointState: a publisher may send only velocity or
@@ -132,11 +163,13 @@ class DuaticRobotsHelper:
         # very dict and callers iterate it from other callbacks — with a
         # MultiThreadedExecutor that is a mutation under an iterator. A rebind gives every
         # reader a consistent snapshot; the copy costs nothing at a few dozen joints.
-        merged = dict(self._joint_states)
+        previous = self._joint_states
+        merged = dict(previous)
         merged.update(zip(msg.name, msg.position))
         self._joint_states = merged
 
-        if self._robot_count <= 0:
+        # Redo robot type detection, on every new joint name.
+        if len(merged) != len(previous):
             self._robot = self.get_robots_with_components()
             self._robot_count = len(self._robot)
 
@@ -241,13 +274,40 @@ class DuaticRobotsHelper:
 
         return component_count
 
-    def wait_for_robot(self):
-        """Wait for the robot to be detected."""
-        while not self._robot:
-            rclpy.spin_once(self.node, timeout_sec=1.0)
+    def wait_for_robot(self, timeout_sec=30.0):
+        """Block until every joint the URDF declares has been seen on /joint_states.
 
-        while self._robot_count <= 0:
-            rclpy.spin_once(self.node, timeout_sec=1.0)
+        Waiting for the first message alone is not enough: it proves one publisher is up,
+        not that all the components are among them.
+
+        Args:
+            timeout_sec: How long to wait for the full joint set.
+
+        Returns:
+            True once every expected joint has arrived, False on timeout
+        """
+        deadline = time.monotonic() + float(timeout_sec)
+        while time.monotonic() < deadline:
+            if self._expected_joints and self._robot_count > 0 and not self._missing_joints():
+                return True
+            rclpy.spin_once(self.node, timeout_sec=0.1)
+
+        if self._robot_count <= 0:
+            self.node.get_logger().error(
+                f"No joint states within {timeout_sec:.1f}s: no robot detected"
+            )
+        elif not self._expected_joints:
+            self.node.get_logger().warning(
+                f"robot_description unreadable within {timeout_sec:.1f}s. "
+                "Continuing with a robot that may be missing components."
+            )
+        else:
+            self.node.get_logger().warning(
+                f"Only {len(self._joint_states)} of {len(self._expected_joints)} joints within "
+                f"{timeout_sec:.1f}s, continuing with a partial robot. Never seen: "
+                f"{sorted(self._missing_joints())}"
+            )
+        return False
 
     def get_component_joint_names(
         self, robot_id="robot_0", component_type="arms", component_name=None
