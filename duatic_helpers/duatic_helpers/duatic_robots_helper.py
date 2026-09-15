@@ -127,7 +127,7 @@ class DuaticRobotsHelper:
         names = set()
         for joint in root.findall("joint"):
             name = joint.get("name")
-            if not name or joint.get("type") not in ("revolute", "continuous"):
+            if not name or joint.get("type") not in ("revolute", "continuous", "prismatic"):
                 continue
             if joint.find("mimic") is not None:
                 continue
