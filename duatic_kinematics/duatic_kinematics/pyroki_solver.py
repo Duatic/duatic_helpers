@@ -82,6 +82,36 @@ def _limit_margin_residual(
 
 _limit_margin_cost = jaxls.Cost.factory(_limit_margin_residual)
 
+# Structural mounts (sensors, hip stack, arm base brackets) that permanently overlap in the
+# 'simple' collision capsules, two or more fixed joints from their neighbor so
+# ignore_immediate_adjacents doesn't catch them. Left active they'd swamp self_collision_cost
+# and mask real violations. Unknown link names are silently skipped, so this list is shared
+# across robot variants rather than DXTR-specific.
+STRUCTURAL_SELF_COLLISION_IGNORE_PAIRS = (
+    ("duarover_base", "lidar_fl_sensor"),
+    ("duarover_base", "lidar_br_sensor"),
+    ("duarover_base", "camera_b_sensor"),
+    ("duarover_base", "realsense_d435i_link"),
+    ("duarover_base", "realsense_d435i_depth_frame"),
+    ("duarover_base", "realsense_d435i_depth_optical_frame"),
+    ("duarover_base", "realsense_d435i_infra1_frame"),
+    ("duarover_base", "realsense_d435i_infra1_optical_frame"),
+    ("duarover_base", "realsense_d435i_infra2_frame"),
+    ("duarover_base", "realsense_d435i_infra2_optical_frame"),
+    ("duarover_base", "realsense_d435i_color_frame"),
+    ("duarover_base", "realsense_d435i_color_optical_frame"),
+    ("hip_base_link", "hip_pitch_link"),
+    ("hip_pitch_link", "duatorso_base"),
+    ("duatorso_base", "head_yaw_link"),
+    ("duatorso_base", "head_pitch_link"),
+    ("duatorso_base", "arm_left/base"),
+    ("duatorso_base", "arm_right/base"),
+    ("arm_left/shoulder_lift_link", "arm_left/base"),
+    ("arm_right/shoulder_lift_link", "arm_right/base"),
+    ("arm_left/base", "arm_left/upperarm"),
+    ("arm_right/base", "arm_right/upperarm"),
+)
+
 
 @jdc.jit
 def _solve_ik(
@@ -127,13 +157,13 @@ def _solve_ik(
             robot,
             joint_var,
         ),
-        # pk.costs.self_collision_cost(
-        #     robot,
-        #     robot_coll,
-        #     joint_var,
-        #     margin=self_collision_margin,
-        #     weight=self_collision_weight,
-        # ),
+        pk.costs.self_collision_cost(
+            robot,
+            robot_coll,
+            joint_var,
+            margin=self_collision_margin,
+            weight=self_collision_weight,
+        ),
         _limit_margin_cost(
             robot,
             joint_var,
@@ -268,7 +298,7 @@ class PyrokiIKSolver:
         self,
         urdf_input,
         self_collision_weight=10.0,
-        self_collision_margin=0.01,
+        self_collision_margin=0.05,
         singularity_nudge_joints=None,
     ):
         """
@@ -286,7 +316,9 @@ class PyrokiIKSolver:
         else:
             urdf_obj = _load_urdf(urdf_input)
         self.robot = pk.Robot.from_urdf(urdf_obj)
-        self.robot_coll = pk.collision.RobotCollision.from_urdf(urdf_obj)
+        self.robot_coll = pk.collision.RobotCollision.from_urdf(
+            urdf_obj, user_ignore_pairs=STRUCTURAL_SELF_COLLISION_IGNORE_PAIRS
+        )
         self.joint_names = list(self.robot.joints.actuated_names)
         self.self_collision_weight = self_collision_weight
         self.self_collision_margin = self_collision_margin
