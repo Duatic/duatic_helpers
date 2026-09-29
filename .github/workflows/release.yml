@@ -12,7 +12,6 @@ on:
           - duatic_helpers
           - duatic_kinematics
           - duatic_monitoring
-          - duatic_move_to_predefined_position
       bump:
         description: 'Override the bump derived from the commits'
         type: choice
