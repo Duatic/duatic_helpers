@@ -57,6 +57,8 @@ class BrakeReleaseNode(Node):
         self.latest_buttons = []
         self.last_joy_time = self.get_clock().now()
         self.brake_combo_was_pressed = False
+        # Set once an activation was sent, so the release deactivates even before the next poll.
+        self.brake_release_requested = False
         # name -> {"state": str, "claimed_interfaces": [str]} from the periodic poll
         self.controller_states = {}
 
@@ -89,16 +91,18 @@ class BrakeReleaseNode(Node):
             joy_alive and pressed(self.deadman_button) and pressed(self.brake_release_button)
         )
 
-        if combo_pressed and not self.brake_combo_was_pressed:
-            self._try_release_brake()  # rising edge: start releasing (guarded)
-        elif not combo_pressed and self.brake_combo_was_pressed:
-            self.deactivate_brake_release()  # falling edge: stop, free the joints
-
+        # Stored before acting, so a states response that returns at once sees the new value.
+        was_pressed = self.brake_combo_was_pressed
         self.brake_combo_was_pressed = combo_pressed
+
+        if combo_pressed and not was_pressed:
+            self._try_release_brake()  # rising edge: start releasing (guarded)
+        elif not combo_pressed and was_pressed:
+            self.deactivate_brake_release()  # falling edge: stop, free the joints
 
     def poll_controller_states(self):
         """Periodically cache all controller states so update() stays non-blocking."""
-        if not self.list_controllers_client.wait_for_service(timeout_sec=0.5):
+        if not self.list_controllers_client.service_is_ready():
             self.get_logger().warn(
                 "Controller Manager not available for status update.", throttle_duration_sec=10.0
             )
@@ -108,17 +112,19 @@ class BrakeReleaseNode(Node):
 
     def _handle_status_response(self, future):
         try:
-            result = future.result()
-            states = {}
-            if result:
-                for controller in result.controller:
-                    states[controller.name] = {
-                        "state": controller.state,
-                        "claimed_interfaces": list(getattr(controller, "claimed_interfaces", [])),
-                    }
-            self.controller_states = states
+            self._store_controller_states(future.result())
         except Exception as e:
             self.get_logger().warn(f"Failed to update controller states: {e}")
+
+    def _store_controller_states(self, result):
+        states = {}
+        if result:
+            for controller in result.controller:
+                states[controller.name] = {
+                    "state": controller.state,
+                    "claimed_interfaces": list(getattr(controller, "claimed_interfaces", [])),
+                }
+        self.controller_states = states
 
     def _is_freeze_active(self):
         """True if any freeze controller is currently active (from the poll cache)."""
@@ -140,7 +146,24 @@ class BrakeReleaseNode(Node):
         return False
 
     def _try_release_brake(self):
-        """Guarded entry point for the brake release combo."""
+        """Fetch fresh controller states, then run the guards on them. The poll cache can be up
+        to two seconds old, too old to tell whether a freeze was just engaged."""
+        if not self.list_controllers_client.service_is_ready():
+            self.get_logger().error("Controller Manager service not available for brake release.")
+            return
+        future = self.list_controllers_client.call_async(ListControllers.Request())
+        future.add_done_callback(self._release_with_fresh_states)
+
+    def _release_with_fresh_states(self, future):
+        try:
+            self._store_controller_states(future.result())
+        except Exception as e:
+            self.get_logger().error(f"Brake release ignored: controller states unavailable: {e}")
+            return
+        # The combo may have been let go while the states were being fetched.
+        if not self.brake_combo_was_pressed:
+            return
+
         # Guard 1: never release the brake while frozen (E-Stop must be cleared first).
         if self._is_freeze_active():
             self.get_logger().warn("Brake release ignored: freeze controller is active.")
@@ -163,7 +186,7 @@ class BrakeReleaseNode(Node):
     def activate_brake_release(self):
         """Activate the brake release controller. The brake-pin nudge happens on its activation;
         it stays active (holding the joints) until the combo is released."""
-        if not self.switch_controller_client.wait_for_service(timeout_sec=1.0):
+        if not self.switch_controller_client.service_is_ready():
             self.get_logger().error("Controller Manager service not available for brake release.")
             return
 
@@ -177,15 +200,18 @@ class BrakeReleaseNode(Node):
         request.strictness = SwitchController.Request.BEST_EFFORT
 
         self.get_logger().info("Brake release combo held - activating brake release controller.")
+        self.brake_release_requested = True
         future = self.switch_controller_client.call_async(request)
         future.add_done_callback(lambda f: self._log_switch_response(f, "activation"))
 
     def deactivate_brake_release(self):
         name = self.brake_release_controller
-        # Nothing to do if it is not (or no longer) active.
-        if self.controller_states.get(name, {}).get("state") != "active":
+        # Nothing to do if it was neither requested nor seen active.
+        seen_active = self.controller_states.get(name, {}).get("state") == "active"
+        if not (self.brake_release_requested or seen_active):
             return
-        if not self.switch_controller_client.wait_for_service(timeout_sec=1.0):
+        self.brake_release_requested = False
+        if not self.switch_controller_client.service_is_ready():
             self.get_logger().error(
                 "Controller Manager service not available to deactivate brake release."
             )
