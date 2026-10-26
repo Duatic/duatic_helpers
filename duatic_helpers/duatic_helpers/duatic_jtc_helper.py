@@ -23,6 +23,8 @@
 
 import re
 import rclpy
+from rclpy.clock import Clock, ClockType
+from rclpy.duration import Duration
 from duatic_helpers.duatic_param_helper import DuaticParamHelper
 
 
@@ -129,8 +131,9 @@ class DuaticJTCHelper:
             return []
 
         found_topics = []
-        max_retries = 100
-        retry_count = 0
+
+        steady_clock = Clock(clock_type=ClockType.STEADY_TIME)
+        topics_deadline = steady_clock.now() + Duration(seconds=10.0)
 
         # Construct the search pattern
         namespace = self.node.get_namespace().strip("/")
@@ -140,7 +143,7 @@ class DuaticJTCHelper:
             search_pattern = f"/{controller_name}*/{identifier}"
 
         # Find all topics matching the controller name and identifier
-        while retry_count < max_retries:
+        while steady_clock.now() < topics_deadline:
             all_matched_topics = self.get_topic_names_and_types_function(search_pattern)
 
             # Filter topics to only include those with the component_names in their controller namespace
@@ -161,7 +164,6 @@ class DuaticJTCHelper:
                 throttle_duration_sec=10,
             )
             rclpy.spin_once(self.node, timeout_sec=0.5)
-            retry_count += 1
 
         if len(found_topics) < len(component_names):
             self.node.get_logger().error(
