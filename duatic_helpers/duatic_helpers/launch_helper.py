@@ -25,7 +25,19 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 
 
-def simulator_not_subcomponent_condition(simulator: str):
+def simulator_not_subcomponent_condition(simulator: str) -> IfCondition:
+    """
+    Create a condition that holds for a given simulator when not started as a subcomponent.
+
+    Evaluates the launch arguments 'start_as_subcomponent' and 'simulator' at launch time.
+
+    Args:
+        simulator: Simulator name to compare the 'simulator' launch argument against.
+
+    Returns:
+        Condition that is true if 'start_as_subcomponent' is not 'true' (case-insensitive) and
+        the 'simulator' launch argument equals the given simulator.
+    """
     return IfCondition(
         PythonExpression(
             [

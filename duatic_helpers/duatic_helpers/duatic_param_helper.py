@@ -21,18 +21,47 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import rclpy
 from rclpy.parameter_client import AsyncParameterClient
 
+if TYPE_CHECKING:
+    from rcl_interfaces.msg import ParameterValue
+    from rclpy.node import Node
+
 
 class DuaticParamHelper:
-    """Helper class for Joint Trajectory Controller topic discovery and management."""
+    """Helper class for reading parameters (e.g. the robot URDF) from other nodes."""
 
-    def __init__(self, node):
+    def __init__(self, node: Node) -> None:
+        """
+        Construct the helper.
+
+        Args:
+            node: Node used to create parameter clients and to spin while waiting.
+        """
         self.node = node
 
-    def get_param_values(self, controller_ns, param_name, timeout_sec=2.0):
-        """Retrieve parameter values from the node."""
+    def get_param_values(
+        self, controller_ns: str, param_name: str, timeout_sec: float = 2.0
+    ) -> list[ParameterValue] | None:
+        """
+        Retrieve parameter values from another node.
+
+        Spins the node while waiting, with a fixed 5 s timeout for the reply.
+
+        Args:
+            controller_ns: Name of the node that holds the parameter.
+            param_name: Name of the parameter to read.
+            timeout_sec: How long to wait for the node's parameter services, in seconds.
+
+        Returns:
+            The values of the requested parameters, or None if the services are not available,
+            the request timed out or no value was returned.
+        """
         param_client = AsyncParameterClient(self.node, controller_ns)
 
         # Check if services are available before requesting
@@ -68,8 +97,24 @@ class DuaticParamHelper:
 
         return None
 
-    def get_urdf(self, node_name="robot_state_publisher", param_name="robot_description"):
-        """Retrieve the robot URDF from the parameter server."""
+    def get_urdf(
+        self, node_name: str = "robot_state_publisher", param_name: str = "robot_description"
+    ) -> str | None:
+        """
+        Retrieve the robot URDF from the parameter server.
+
+        If the node is not found under the given name, the ROS graph is searched for a single
+        node with that base name in any namespace.
+
+        Args:
+            node_name: Name of the node holding the URDF. Pass the fully-qualified name to
+                select one robot if several nodes of the same name exist.
+            param_name: Name of the parameter holding the URDF.
+
+        Returns:
+            The URDF XML string, or None if it could not be retrieved (not found, empty or
+            ambiguous).
+        """
         try:
             urdf_values = self.get_param_values(node_name, param_name)
             if urdf_values and urdf_values[0].string_value:

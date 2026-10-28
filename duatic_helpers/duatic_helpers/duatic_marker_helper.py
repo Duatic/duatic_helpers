@@ -21,21 +21,48 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import numpy as np
 from tf_transformations import quaternion_matrix
 
+if TYPE_CHECKING:
+    from geometry_msgs.msg import PoseStamped
+    from rclpy.node import Node
+
 
 class DuaticMarkerHelper:
+    """Helper class for publishing pose markers on the '/marker_visu' topic."""
 
-    def __init__(self, node, namespace_prefix: str = ""):
+    def __init__(self, node: Node, namespace_prefix: str = "") -> None:
+        """
+        Construct the helper and its marker publisher.
+
+        Args:
+            node: Node used to create the publisher.
+            namespace_prefix: Stored as an attribute, currently not used for the markers.
+        """
         self.node = node
         self.marker_publisher = self.node.create_publisher(MarkerArray, "/marker_visu", 100)
         self.namespace_prefix = namespace_prefix
 
-    def create_pose_markers(self, pose_stamped, frame, ns_prefix=""):
-        """Create a sphere marker at the pose and three arrow markers for the axes."""
+    def create_pose_markers(
+        self, pose_stamped: PoseStamped, frame: str, ns_prefix: str = ""
+    ) -> None:
+        """
+        Publish a sphere marker at the pose and three arrow markers for its axes.
+
+        The axes are drawn 0.1 m long, with x in red, y in green and z in blue.
+
+        Args:
+            pose_stamped: Pose to visualize. Its stamp is used for the markers.
+            frame: Frame the pose is expressed in, set as the frame of the markers.
+            ns_prefix: Prefix for the marker namespaces.
+        """
         marker_array = MarkerArray()
 
         # Sphere marker
@@ -99,8 +126,8 @@ class DuaticMarkerHelper:
 
         self.marker_publisher.publish(marker_array)
 
-    def clear_markers(self):
-        """Clears all or specific markers."""
+    def clear_markers(self) -> None:
+        """Publish a marker array that deletes all markers."""
         marker_array = MarkerArray()
         marker = Marker()
         marker.action = Marker.DELETEALL

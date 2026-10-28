@@ -21,24 +21,28 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile
 
-from typing import Union, List
+if TYPE_CHECKING:
+    from typing import Any
+
+    from rclpy.node import Node
+    from rclpy.qos import QoSProfile
 
 
-def wait_for_node(node, node_name: str, timeout: float = 10.0):
+def wait_for_node(node: Node, node_name: str, timeout: float = 10.0) -> None:
     """
     Waits until the specified node name appears in the ROS graph.
 
     Args:
         node: rclpy Node object used to query node names.
         node_name: Name of the node to look for.
-        timeout: How long to wait before failing.
-        poll_interval: How often to check.
+        timeout: How long to wait before failing, in seconds.
 
     Raises:
         AssertionError: If the node is not found within the timeout.
@@ -59,7 +63,7 @@ def wait_for_node(node, node_name: str, timeout: float = 10.0):
 
 def wait_for_node_with_namespace(
     node: Node, node_name: str, node_namespace: str, timeout: float = 10.0
-):
+) -> None:
     """
     Waits until the specified node with the exact name and namespace appears in the ROS graph.
 
@@ -67,7 +71,7 @@ def wait_for_node_with_namespace(
         node: rclpy Node object used to query node names and namespaces.
         node_name: Name of the node to look for (e.g., 'my_node').
         node_namespace: Expected namespace of the node (e.g., '/robot1').
-        timeout: Max time to wait for the node.
+        timeout: Max time to wait for the node, in seconds.
 
     Raises:
         AssertionError: If the node with the namespace is not found within the timeout.
@@ -91,21 +95,31 @@ def wait_for_node_with_namespace(
     )
 
 
-def wait_for_topic(node, topic_name: str, timeout: float = 10.0):
+def wait_for_topic(node: Node, topic_name: str, timeout: float = 10.0) -> None:
     """
+    Waits until the specified topic is advertised in the ROS graph.
+
     This will get deprecated soon. Use wait_for_topics() instead.
+
+    Args:
+        node: rclpy Node object used to query topics.
+        topic_name: Name of the topic to look for.
+        timeout: How long to wait before failing, in seconds.
+
+    Raises:
+        AssertionError: If the topic is not found within the timeout.
     """
     wait_for_topics(node, [topic_name], timeout)
 
 
-def wait_for_topics(node, topic_names: Union[str, List[str]], timeout: float = 10.0):
+def wait_for_topics(node: Node, topic_names: str | list[str], timeout: float = 10.0) -> None:
     """
     Waits until the specified topic(s) are advertised in the ROS graph.
 
     Args:
         node: rclpy Node object used to query topics.
         topic_names: A single topic name or a list of topic names to look for.
-        timeout: How long to wait before failing.
+        timeout: How long to wait before failing, in seconds.
 
     Raises:
         AssertionError: If not all topics are found within the timeout.
@@ -143,14 +157,28 @@ def wait_for_topics(node, topic_names: Union[str, List[str]], timeout: float = 1
 def wait_for_message(
     node: Node,
     topic_name: str,
-    msg_type_str: str,
+    msg_type_str: type[Any],
     timeout: float = 10.0,
-    qos_profile: QoSProfile = 10,
-):
-    """Waits until a message is received on the topic within the timeout."""
+    qos_profile: QoSProfile | int = 10,
+) -> None:
+    """
+    Waits until a message is received on the topic within the timeout.
+
+    Args:
+        node: rclpy Node object used to create the temporary subscription and to spin.
+        topic_name: Name of the topic to subscribe to.
+        msg_type_str: Message class to subscribe with, as expected by
+            Node.create_subscription() (e.g. std_msgs.msg.String). Despite the name, this is
+            not a string.
+        timeout: How long to wait before failing, in seconds.
+        qos_profile: QoS profile or history depth of the subscription.
+
+    Raises:
+        AssertionError: If no message is received within the timeout.
+    """
     received_msg = []
 
-    def callback(msg):
+    def callback(msg: Any) -> None:
         received_msg.append(msg)
 
     sub = node.create_subscription(msg_type_str, topic_name, callback, qos_profile)

@@ -21,13 +21,37 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import rclpy
 from controller_manager_msgs.srv import ListControllers, SwitchController
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from rclpy.node import Node
+    from rclpy.task import Future
+
 
 class DuaticControllerHelper:
+    """
+    Helper class that tracks and switches the controllers of a controller manager.
 
-    def __init__(self, node, robot_namespace=""):
+    Periodically fetches the controllers and their states, restricted to a whitelist of known
+    controller types, and keeps a snapshot of them as well as the state of the freeze controller.
+    """
+
+    def __init__(self, node: Node, robot_namespace: str = "") -> None:
+        """
+        Construct the helper, create the service clients and start the periodic update.
+
+        Args:
+            node: Node used to create the clients and the timer, and for logging.
+            robot_namespace: Namespace of the controller manager. If empty, the namespace of the
+                node is used.
+        """
         self.node = node
 
         # Resolve namespace from parameter if not explicitly provided
@@ -37,7 +61,7 @@ class DuaticControllerHelper:
         # Clean up namespace (remove trailing slashes)
         self.robot_namespace = robot_namespace.rstrip("/") if robot_namespace else ""
 
-        self.controller_whitelist = [
+        self.controller_whitelist: list[str] = [
             "freedrive_controller",
             "joint_trajectory_controller",
             "cartesian_pose_controller",
@@ -46,11 +70,12 @@ class DuaticControllerHelper:
             "freeze_controller",
         ]
 
-        self.active_low_level_controllers = []
+        self.active_low_level_controllers: list[str] = []
         self._is_freeze_active = False
 
         # Only store controllers that are actually found
-        self._found_controllers_by_base = {}
+        # (whitelist base name to a list of {controller name: state})
+        self._found_controllers_by_base: dict[str, list[dict[str, str]]] = {}
 
         self._run_once = False
 
@@ -66,7 +91,7 @@ class DuaticControllerHelper:
 
         self.node.create_timer(0.1, self._get_all_controllers)
 
-    def _resolve_namespace(self):
+    def _resolve_namespace(self) -> str:
         """
         Resolve namespace from multiple sources in priority order.
 
@@ -74,6 +99,9 @@ class DuaticControllerHelper:
         1. Node namespace (if set and not root)
         2. Empty string (default - for backward compatibility)
         3. URDF robot name (optional, from robot_description parameter)
+
+        Returns:
+            The namespace without leading and trailing slashes, empty if there is none.
         """
         # Priority 1: Node namespace
         node_ns = self.node.get_namespace()
@@ -97,11 +125,12 @@ class DuaticControllerHelper:
 
         return ""
 
-    def _get_robot_name_from_urdf(self):
+    def _get_robot_name_from_urdf(self) -> str:
         """
         Extract robot name from URDF robot_description parameter.
 
-        Returns empty string if not found or on error.
+        Returns:
+            The name of the robot, or an empty string if not found or on error.
         """
         try:
             from duatic_helpers.duatic_param_helper import (
@@ -130,11 +159,20 @@ class DuaticControllerHelper:
 
         return ""
 
-    def get_all_controllers(self, matching_names=None):
+    def get_all_controllers(
+        self, matching_names: Sequence[str] | None = None
+    ) -> dict[str, list[dict[str, str]]] | list[str]:
         """
         Returns the found controllers by base.
 
-        If matching_names is provided, returns a dict with only those controllers.
+        Args:
+            matching_names: If provided, only controllers whose base name or full name is in
+                this sequence are returned.
+
+        Returns:
+            Without matching names, the mapping from the whitelist base name to a list of
+            {controller name: state}. With matching names, the list of the names of the matching
+            controllers.
         """
         if not matching_names:
             return self._found_controllers_by_base
@@ -153,19 +191,46 @@ class DuaticControllerHelper:
                         filtered.append(ctrl_name)
         return filtered
 
-    def get_active_controllers(self):
-        """Returns a list of currently active controllers. May be empty if timer hasn't run yet."""
+    def get_active_controllers(self) -> list[str]:
+        """
+        Returns a list of currently active controllers.
+
+        Returns:
+            Names of the active whitelisted controllers. May be empty if timer hasn't run yet.
+        """
         return self.active_low_level_controllers
 
-    def is_freeze_active(self):
-        """Checks if the freeze controller is currently active. Defaults to False if not yet determined."""
+    def is_freeze_active(self) -> bool:
+        """
+        Checks if the freeze controller is currently active.
+
+        Returns:
+            True if it is active. Defaults to False if not yet determined.
+        """
         return self._is_freeze_active
 
-    def is_controller_data_ready(self):
-        """Returns True if controller data has been fetched at least once."""
+    def is_controller_data_ready(self) -> bool:
+        """
+        Checks if controller data has been fetched.
+
+        Returns:
+            True if controller data has been fetched at least once.
+        """
         return self._run_once
 
-    def switch_controller(self, activate_controllers, deactivate_controllers):
+    def switch_controller(
+        self, activate_controllers: Sequence[str], deactivate_controllers: Sequence[str]
+    ) -> None:
+        """
+        Asynchronously activate and deactivate controllers.
+
+        Controllers that are already in the desired state are skipped, and nothing is sent if
+        no change remains. The controller snapshot is refreshed once the switch succeeded.
+
+        Args:
+            activate_controllers: Names of the controllers to activate.
+            deactivate_controllers: Names of the controllers to deactivate.
+        """
 
         if not activate_controllers and not deactivate_controllers:
             self.node.get_logger().debug(
@@ -197,7 +262,7 @@ class DuaticControllerHelper:
 
         future = self.switch_controller_client.call_async(req)
 
-        def callback(future):
+        def callback(future: Future) -> None:
             try:
                 response = future.result()
                 if response.ok:
@@ -216,8 +281,20 @@ class DuaticControllerHelper:
 
         future.add_done_callback(callback)
 
-    def wait_for_controller_loaded(self, controller_name, timeout=60.0):
-        """Checks if a specific controller is loaded."""
+    def wait_for_controller_loaded(self, controller_name: str, timeout: float = 60.0) -> bool:
+        """
+        Checks if a specific controller is loaded.
+
+        Waits for the controller data first, which spins the node.
+
+        Args:
+            controller_name: Name of the controller.
+            timeout: How long to wait for the controller data, in seconds.
+
+        Returns:
+            True if the controller is among the found whitelisted controllers, False if not or
+            if the data did not arrive in time.
+        """
         if not self.wait_for_controller_data(timeout_sec=timeout):
             return False
 
@@ -229,8 +306,16 @@ class DuaticControllerHelper:
 
         return False
 
-    def wait_for_controller_data(self, timeout_sec=20.0):
-        """Wait for controller data to be available, returns True if successful."""
+    def wait_for_controller_data(self, timeout_sec: float = 20.0) -> bool:
+        """
+        Wait for controller data to be available, spinning the node meanwhile.
+
+        Args:
+            timeout_sec: How long to wait, in seconds.
+
+        Returns:
+            True if the controller data is available, False on timeout.
+        """
         import time
 
         start_time = time.time()
@@ -238,8 +323,8 @@ class DuaticControllerHelper:
             rclpy.spin_once(self.node, timeout_sec=0.05)
         return self._run_once
 
-    def _get_all_controllers(self):
-        """Fetches all controllers and their states."""
+    def _get_all_controllers(self) -> None:
+        """Asynchronously fetches all controllers and their states, and updates the snapshot."""
         if not self.controller_client.wait_for_service(timeout_sec=2.0):
             self.node.get_logger().warn(
                 "Controller manager service not available.", throttle_duration_sec=10.0
@@ -249,7 +334,7 @@ class DuaticControllerHelper:
         req = ListControllers.Request()
         future = self.controller_client.call_async(req)
 
-        def callback(future):
+        def callback(future: Future) -> None:
             if future.done():
                 try:
                     response = future.result()

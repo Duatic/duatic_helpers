@@ -21,22 +21,54 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
+
 import rclpy
 from rclpy.clock import Clock, ClockType
 from rclpy.duration import Duration
 from duatic_helpers.duatic_param_helper import DuaticParamHelper
 
+if TYPE_CHECKING:
+    from typing import Any
+
+    from rclpy.node import Node
+
 
 class DuaticJTCHelper:
     """Helper class for Joint Trajectory Controller topic discovery and management."""
 
-    def __init__(self, node):
+    def __init__(self, node: Node) -> None:
+        """
+        Construct the helper.
+
+        Args:
+            node: Node used to query the ROS graph and the controllers' parameters.
+        """
         self.node = node
         self.duatic_param_helper = DuaticParamHelper(self.node)
 
-    def process_topics_and_extract_joint_names(self, found_topics):
+    def process_topics_and_extract_joint_names(
+        self, found_topics: list[tuple[str, list[str]]]
+    ) -> tuple[dict[str, list[str]], dict[str, Any]]:
+        """
+        Look up the joint names of the controllers behind the given topics.
 
+        The controller is taken from the second-to-last topic segment, and its 'joints'
+        parameter is read. Topics for which no non-empty 'joints' parameter is found are
+        skipped.
+
+        Args:
+            found_topics: Topic names with their types, e.g. as returned by
+                find_topics_for_controller().
+
+        Returns:
+            Tuple of a mapping from topic to the joint names of its controller, and a mapping
+            from topic to an empty placeholder for the commanded positions of that topic, which
+            the caller is expected to fill.
+        """
         topic_to_joint_names = {}  # Dictionary to map topics to joint names
         topic_to_commanded_positions = {}  # Dictionary to hold commanded positions for each topic
 
@@ -102,8 +134,18 @@ class DuaticJTCHelper:
 
         return topic_to_joint_names, topic_to_commanded_positions
 
-    # Get topic names and types, filtering by a given name pattern.
-    def get_topic_names_and_types_function(self, by_name):
+    def get_topic_names_and_types_function(self, by_name: str) -> list[tuple[str, list[str]]]:
+        """
+        Get topic names and types, filtering by a given name pattern.
+
+        Args:
+            by_name: Pattern to search for in the topic names. If it contains '*', each '*'
+                matches any characters and the pattern is searched as a regular expression,
+                with a leading '/' added if missing. Otherwise it is matched literally.
+
+        Returns:
+            Topic names with their types, for all topics that match the pattern.
+        """
         # Convert wildcard pattern to regex pattern
         # Handle the specific case where we search for controller patterns
         if "*" in by_name:
@@ -124,8 +166,24 @@ class DuaticJTCHelper:
         self.node.get_logger().debug(f"Filtered topics matching '{by_name}': {matches}")
         return matches
 
-    def find_topics_for_controller(self, controller_name, identifier, component_names=[]):
+    def find_topics_for_controller(
+        self, controller_name: str, identifier: str, component_names: list[str] = []
+    ) -> list[tuple[str, list[str]]]:
+        """
+        Find topics for a given controller name and identifier, filtering by component names.
 
+        Retries for up to 10 s until at least as many topics as component names are found.
+
+        Args:
+            controller_name: Name prefix of the controllers, e.g. 'joint_trajectory_controller'.
+            identifier: Last topic segment to look for, e.g. 'joint_trajectory'.
+            component_names: Component names that the controller namespaces must end with
+                (an empty name matches every controller).
+
+        Returns:
+            Topic names with their types, or an empty list if no component names were given or
+            fewer topics than component names were found.
+        """
         if not component_names:
             self.node.get_logger().warning("No component names provided, returning empty list")
             return []

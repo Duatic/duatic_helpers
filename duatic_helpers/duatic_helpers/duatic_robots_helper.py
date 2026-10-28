@@ -21,27 +21,49 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import re
 import time
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
 
 import rclpy
-from rclpy.node import Node
 
 from sensor_msgs.msg import JointState
 from controller_manager_msgs.srv import ListHardwareComponents
 from duatic_helpers.duatic_param_helper import DuaticParamHelper
 
+if TYPE_CHECKING:
+    from typing import Any
+
+    from rclpy.node import Node
+
 
 class DuaticRobotsHelper:
+    """
+    Helper class that tracks the joint states of the robot and detects its structure.
 
-    def __init__(self, node: Node):
+    Identifies the robot morphology from the URDF, groups the joints seen on 'joint_states'
+    into robots and components (arms, platform, ...) by their names, and provides access to
+    them.
+    """
+
+    def __init__(self, node: Node) -> None:
+        """
+        Construct the helper, subscribe to 'joint_states' and read the URDF.
+
+        Args:
+            node: Node used for the subscription, service client and logging.
+        """
         self.node = node
 
-        self._joint_states = {}
-        self._robot = {}
+        # Joint name to position
+        self._joint_states: dict[str, float] = {}
+        # Robot id to component name to {"type": component type, "joints": joint names}
+        self._robot: dict[str, dict[str, dict[str, Any]]] = {}
         self._robot_count = 0
-        self._expected_joints = set()
+        self._expected_joints: set[str] = set()
 
         self._end_effector_keywords = (
             "finger",
@@ -73,8 +95,14 @@ class DuaticRobotsHelper:
         self.robot_structure = "unknown"
         self._initialize_from_urdf()
 
-    def _initialize_from_urdf(self):
-        """Try to identify robot structure from URDF."""
+    def _initialize_from_urdf(self) -> None:
+        """
+        Try to identify robot structure from URDF.
+
+        Sets the robot structure to one of 'mobile_manipulator', 'multi_arm', 'mobile_base',
+        'single_arm' or 'generic', and stores the joints expected on 'joint_states'. Both are
+        left unchanged if the URDF cannot be read.
+        """
         urdf_raw = self.param_helper.get_urdf()
         if urdf_raw:
             self._expected_joints = self._movable_joint_names(urdf_raw)
@@ -107,14 +135,21 @@ class DuaticRobotsHelper:
                 "set, so wait_for_robot() cannot confirm the robot is complete."
             )
 
-    def _movable_joint_names(self, urdf_raw):
-        """The joint names a complete /joint_states is expected to carry.
+    def _movable_joint_names(self, urdf_raw: str) -> set[str]:
+        """
+        The joint names a complete /joint_states is expected to carry.
 
-        Listed by type rather than by exclusion: revolute and continuous are the joints
-        that report one position on the topic. Fixed has no state at all, floating and
+        Listed by type rather than by exclusion: revolute, continuous and prismatic are the
+        joints that report one position on the topic. Fixed has no state at all, floating and
         planar have several degrees of freedom and no single position, and a mimic joint
         is computed from the joint it follows rather than measured. An unparsable URDF
         yields an empty set, which wait_for_robot() reports as a check it could not run.
+
+        Args:
+            urdf_raw: The URDF as XML string.
+
+        Returns:
+            Names of the joints expected on /joint_states.
         """
         try:
             root = ET.fromstring(urdf_raw)
@@ -134,14 +169,24 @@ class DuaticRobotsHelper:
             names.add(name)
         return names
 
-    def _missing_joints(self):
-        """URDF joints not yet seen on /joint_states."""
+    def _missing_joints(self) -> set[str]:
+        """
+        URDF joints not yet seen on /joint_states.
+
+        Returns:
+            Names of the expected joints that have not been received yet.
+        """
         return self._expected_joints - set(self._joint_states)
 
-    def _joint_state_callback(self, msg):
-        """Update the JointState cache and robot type.
+    def _joint_state_callback(self, msg: JointState) -> None:
+        """
+        Update the JointState cache and robot type.
 
         The cache only grows: a publisher that goes away leaves its last values behind.
+
+        Args:
+            msg: The received joint state. Messages without positions, or with a different
+                number of names and positions, are ignored.
         """
         if not msg.position:
             # Legal per sensor_msgs/JointState: a publisher may send only velocity or
@@ -173,20 +218,43 @@ class DuaticRobotsHelper:
             self._robot = self.get_robots_with_components()
             self._robot_count = len(self._robot)
 
-    def get_joint_states(self):
-        """Returns a dictionary of joint names and their positions."""
+    def get_joint_states(self) -> dict[str, float]:
+        """
+        Returns a dictionary of joint names and their positions.
+
+        Returns:
+            Snapshot of the joint positions by joint name. It is replaced, not modified, on
+            new messages, so it is safe to iterate.
+        """
         return self._joint_states
 
-    def get_joint_value_from_states(self, joint_name):
-        """Get the current position value for a specific joint from joint states."""
+    def get_joint_value_from_states(self, joint_name: str) -> float:
+        """
+        Get the current position value for a specific joint from joint states.
+
+        Args:
+            joint_name: Name of the joint.
+
+        Returns:
+            The joint position, or 0.0 (with a warning) if the joint has not been seen.
+        """
         if joint_name in self._joint_states:
             return self._joint_states[joint_name]
         else:
             self.node.get_logger().warning(f"Joint '{joint_name}' not found in joint states")
             return 0.0
 
-    def get_component_names(self, filter_by_type=None):
-        """Returns a list of component names, optionally filtered by type."""
+    def get_component_names(self, filter_by_type: str | None = None) -> list[str]:
+        """
+        Returns a list of component names, optionally filtered by type.
+
+        Args:
+            filter_by_type: Only return components of this type (e.g. 'arm', 'platform').
+                If None, all components are returned.
+
+        Returns:
+            The component names, empty if no robot was detected yet.
+        """
         if self._robot_count <= 0:
             self.node.get_logger().error("No robots detected. Cannot get component names.")
             return []
@@ -203,8 +271,14 @@ class DuaticRobotsHelper:
 
         return component_names
 
-    def get_robots_with_components(self):
-        """Returns a dictionary of robots with their detected components."""
+    def get_robots_with_components(self) -> dict[str, dict[str, dict[str, Any]]]:
+        """
+        Returns a dictionary of robots with their detected components.
+
+        Returns:
+            Mapping from robot id to component name to a dictionary with the component 'type'
+            and the sorted names of its 'joints'. Empty if no joint states were received.
+        """
         if not self._joint_states:
             self.node.get_logger().error("No joint states received. Cannot detect robots.")
             return {}
@@ -234,8 +308,16 @@ class DuaticRobotsHelper:
         self.node.get_logger().debug(f"Detected robot structure: {robots}")
         return robots
 
-    def _parse_joint_name(self, joint_name):
-        """Parse a joint name to extract robot ID, component name, and component type."""
+    def _parse_joint_name(self, joint_name: str) -> tuple[str, str, str]:
+        """
+        Parse a joint name to extract robot ID, component name, and component type.
+
+        Args:
+            joint_name: Name of the joint, e.g. 'arm_left/shoulder_rotation'.
+
+        Returns:
+            Tuple of the robot id, the component name and the component type.
+        """
         # Handle different joint naming patterns
 
         # Pattern 1: arm_left/shoulder_rotation, arm_right/elbow_flexion
@@ -260,8 +342,16 @@ class DuaticRobotsHelper:
         # Default: treat as miscellaneous component
         return "robot_0", "misc", "misc"
 
-    def get_component_count(self, component_type="arm"):
-        """Get the number of components detected."""
+    def get_component_count(self, component_type: str = "arm") -> int:
+        """
+        Get the number of components detected.
+
+        Args:
+            component_type: Type of the components to count (e.g. 'arm', 'platform').
+
+        Returns:
+            The number of components of this type, 0 if no robot was detected yet.
+        """
         if self._robot_count <= 0:
             self.node.get_logger().error("No robots detected. Cannot get component count.")
             return 0
@@ -274,17 +364,18 @@ class DuaticRobotsHelper:
 
         return component_count
 
-    def wait_for_robot(self, timeout_sec=30.0):
-        """Block until every joint the URDF declares has been seen on /joint_states.
+    def wait_for_robot(self, timeout_sec: float = 30.0) -> bool:
+        """
+        Block until every joint the URDF declares has been seen on /joint_states.
 
         Waiting for the first message alone is not enough: it proves one publisher is up,
         not that all the components are among them.
 
         Args:
-            timeout_sec: How long to wait for the full joint set.
+            timeout_sec: How long to wait for the full joint set, in seconds.
 
         Returns:
-            True once every expected joint has arrived, False on timeout
+            True once every expected joint has arrived, False on timeout.
         """
         deadline = time.monotonic() + float(timeout_sec)
         while time.monotonic() < deadline:
@@ -310,18 +401,50 @@ class DuaticRobotsHelper:
         return False
 
     def get_component_joint_names(
-        self, robot_id="robot_0", component_type="arms", component_name=None
-    ):
-        """Get joints for a specific component."""
+        self,
+        robot_id: str = "robot_0",
+        component_type: str = "arms",
+        component_name: str | None = None,
+    ) -> list[str]:
+        """
+        Get joints for a specific component.
+
+        Note: _is_robot_ready() never returns True, so this currently always returns an empty
+        list.
+
+        Args:
+            robot_id: Id of the robot.
+            component_type: Key of the component group in the robot's components.
+            component_name: Name of the component.
+
+        Returns:
+            The joint names of the component, empty if it is not ready.
+        """
         if not self._is_robot_ready(robot_id, component_type, component_name):
             return []
 
         return self._robot[robot_id][component_type][component_name]["joints"]
 
     def get_component_joint_states(
-        self, robot_id="robot_0", component_type="arms", component_name=None
-    ):
-        """Returns the joint_states for a component."""
+        self,
+        robot_id: str = "robot_0",
+        component_type: str = "arms",
+        component_name: str | None = None,
+    ) -> dict[str, float]:
+        """
+        Returns the joint_states for a component.
+
+        Note: _is_robot_ready() never returns True, so this currently always returns an empty
+        dictionary.
+
+        Args:
+            robot_id: Id of the robot.
+            component_type: Key of the component group in the robot's components.
+            component_name: Name of the component.
+
+        Returns:
+            Joint positions by joint name for the component's joints, empty if it is not ready.
+        """
         if not self._is_robot_ready(robot_id, component_type, component_name):
             return {}
 
@@ -329,8 +452,24 @@ class DuaticRobotsHelper:
         joints = self._robot[robot_id][component_type][component_name]["joints"]
         return {joint: joint_states[joint] for joint in joints if joint in joint_states}
 
-    def _is_robot_ready(self, robot_id="robot_0", component_type="arms", component_name=None):
-        """Check if the robot is ready by verifying joint states."""
+    def _is_robot_ready(
+        self,
+        robot_id: str = "robot_0",
+        component_type: str = "arms",
+        component_name: str | None = None,
+    ) -> bool | None:
+        """
+        Check if the robot is ready by verifying joint states.
+
+        Args:
+            robot_id: Id of the robot.
+            component_type: Key of the component group in the robot's components.
+            component_name: Name of the component.
+
+        Returns:
+            False (with an error log) if the robot or component was not found. Falls through
+            to None if all checks pass, so the result is falsy in every case.
+        """
         if self._robot_count <= 0:
             self.node.get_logger().error("No robots detected. Cannot get component joint states.")
             return False
@@ -347,8 +486,16 @@ class DuaticRobotsHelper:
             self.node.get_logger().error(f"Component {component_name} not found")
             return False
 
-    def check_simulation_mode(self):
-        """Detect if we're running in simulation or real hardware mode."""
+    def check_simulation_mode(self) -> bool:
+        """
+        Detect if we're running in simulation or real hardware mode.
+
+        Checks the plugin names of the hardware components for 'mock', 'fake' and 'gazebo'.
+
+        Returns:
+            True if a simulated hardware component was found, False for real hardware or if
+            the hardware components could not be listed.
+        """
         is_simulation = False
 
         if not self.hardware_components_client.wait_for_service(timeout_sec=5.0):
@@ -364,7 +511,7 @@ class DuaticRobotsHelper:
 
         if future.result() is None:
             self.node.get_logger().debug("Hardware components service call failed")
-            return 0
+            return False
 
         response = future.result()
         for component in response.component:
@@ -386,7 +533,16 @@ class DuaticRobotsHelper:
 
         return is_simulation
 
-    def get_dt(self):
+    def get_dt(self) -> float:
+        """
+        Get the control period, depending on whether running in simulation or on hardware.
+
+        Also stores the result of the simulation check and the period as the attributes
+        is_simulation and dt.
+
+        Returns:
+            The period in seconds: 0.05 in simulation, 0.001 on real hardware.
+        """
         self.is_simulation = self.check_simulation_mode()
 
         if self.is_simulation:
