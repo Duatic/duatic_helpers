@@ -12,26 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Generator
+from __future__ import annotations
+
 import tempfile
-from typing import Optional, TypeAlias, Union
+from typing import TYPE_CHECKING
 
 import launch
 import yaml
 
-YamlValue: TypeAlias = Union[str, int, float, bool]
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from typing import TypeAlias
+
+YamlValue: TypeAlias = str | int | float | bool
 
 
 class DictItemReference:
+    """Reference to a single entry of a dictionary, allowing the entry's value to be replaced."""
 
-    def __init__(self, dictionary: dict[str, YamlValue], key: str):
+    def __init__(self, dictionary: dict[str, YamlValue], key: str) -> None:
+        """
+        Construct the reference.
+
+        Args:
+            dictionary: The dictionary containing the entry.
+            key: The key of the entry in the dictionary.
+        """
         self.dictionary = dictionary
         self.dictKey = key
 
     def key(self) -> str:
+        """Return the key of the referenced entry."""
         return self.dictKey
 
     def setValue(self, value: YamlValue) -> None:
+        """
+        Replace the value of the referenced entry in the dictionary.
+
+        Args:
+            value: The new value.
+        """
         self.dictionary[self.dictKey] = value
 
 
@@ -46,22 +66,23 @@ class RewrittenYaml(launch.Substitution):
         self,
         source_file: launch.SomeSubstitutionsType,
         param_rewrites: dict[str, launch.SomeSubstitutionsType],
-        root_key: Optional[launch.SomeSubstitutionsType] = None,
-        key_rewrites: Optional[dict[str, launch.SomeSubstitutionsType]] = None,
-        value_rewrites: Optional[dict[str, launch.SomeSubstitutionsType]] = None,
+        root_key: launch.SomeSubstitutionsType | None = None,
+        key_rewrites: dict[str, launch.SomeSubstitutionsType] | None = None,
+        value_rewrites: dict[str, launch.SomeSubstitutionsType] | None = None,
         convert_types: bool = False,
     ) -> None:
-        super().__init__()
         """
-        Construct the substitution
+        Construct the substitution.
 
-        :param: source_file the original YAML file to modify
-        :param: param_rewrites mappings to replace
-        :param: root_key if provided, the contents are placed under this key
-        :param: key_rewrites keys of mappings to replace
-        :param: value_rewrites values to replace
-        :param: convert_types whether to attempt converting the string to a number or boolean
+        Args:
+            source_file: The original YAML file to modify.
+            param_rewrites: Mappings from a parameter key (or dotted path) to its new value.
+            root_key: If provided, the contents are placed under this key.
+            key_rewrites: Mappings from a key to its replacement key.
+            value_rewrites: Mappings from a value to its replacement value.
+            convert_types: Whether to attempt converting the string to a number or boolean.
         """
+        super().__init__()
 
         # import here to avoid loop
         from launch.utilities import normalize_to_list_of_substitutions
@@ -69,11 +90,11 @@ class RewrittenYaml(launch.Substitution):
         self.__source_file: list[launch.Substitution] = normalize_to_list_of_substitutions(
             source_file
         )
-        self.__param_rewrites = {}
-        self.__key_rewrites = {}
-        self.__value_rewrites = {}
+        self.__param_rewrites: dict[str, list[launch.Substitution]] = {}
+        self.__key_rewrites: dict[str, list[launch.Substitution]] = {}
+        self.__value_rewrites: dict[str, list[launch.Substitution]] = {}
         self.__convert_types = convert_types
-        self.__root_key = None
+        self.__root_key: list[launch.Substitution] | None = None
         for key in param_rewrites:
             self.__param_rewrites[key] = normalize_to_list_of_substitutions(param_rewrites[key])
         if key_rewrites is not None:
@@ -97,6 +118,15 @@ class RewrittenYaml(launch.Substitution):
         return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
+        """
+        Write a rewritten copy of the source YAML file.
+
+        Args:
+            context: Launch context used to resolve the file name and the rewrites.
+
+        Returns:
+            Path of the temporary file containing the rewritten YAML.
+        """
         yaml_filename = launch.utilities.perform_substitutions(context, self.name)
         rewritten_yaml = tempfile.NamedTemporaryFile(mode="w", delete=False)
         param_rewrites, keys_rewrites, value_rewrites = self.resolve_rewrites(context)
@@ -119,6 +149,15 @@ class RewrittenYaml(launch.Substitution):
     def resolve_rewrites(
         self, context: launch.LaunchContext
     ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+        """
+        Resolve the parameter, key and value rewrites to plain strings.
+
+        Args:
+            context: Launch context used to resolve the substitutions.
+
+        Returns:
+            The resolved parameter rewrites, key rewrites and value rewrites, in this order.
+        """
         resolved_params = {}
         for key in self.__param_rewrites:
             resolved_params[key] = launch.utilities.perform_substitutions(
@@ -137,6 +176,13 @@ class RewrittenYaml(launch.Substitution):
         return resolved_params, resolved_keys, resolved_values
 
     def substitute_params(self, yaml: dict[str, YamlValue], param_rewrites: dict[str, str]) -> None:
+        """
+        Replace existing parameters in place, matched by leaf key or by full dotted path.
+
+        Args:
+            yaml: The YAML data to modify.
+            param_rewrites: Mappings from a leaf key or dotted path to its new (string) value.
+        """
         # substitute leaf-only parameters
         for key in self.getYamlLeafKeys(yaml):
             if key.key() in param_rewrites:
@@ -153,6 +199,13 @@ class RewrittenYaml(launch.Substitution):
                 yaml = self.updateYamlPathVals(yaml, yaml_keys, rewrite_val)
 
     def add_params(self, yaml: dict[str, YamlValue], param_rewrites: dict[str, str]) -> None:
+        """
+        Add parameters in place that are not yet present, if their path has 'ros__parameters'.
+
+        Args:
+            yaml: The YAML data to modify.
+            param_rewrites: Mappings from a dotted path to its (string) value.
+        """
         # add new total path parameters
         yaml_paths = self.pathify(yaml)
         for path in param_rewrites:
@@ -163,6 +216,13 @@ class RewrittenYaml(launch.Substitution):
                     yaml = self.updateYamlPathVals(yaml, yaml_keys, new_val)
 
     def substitute_values(self, yaml: dict[str, YamlValue], value_rewrites: dict[str, str]) -> None:
+        """
+        Replace values in place, recursing into nested dictionaries and lists.
+
+        Args:
+            yaml: The YAML data to modify.
+            value_rewrites: Mappings from a value (compared as string) to its new (string) value.
+        """
 
         def process_value(value: YamlValue) -> YamlValue:
             if isinstance(value, dict):
@@ -181,7 +241,19 @@ class RewrittenYaml(launch.Substitution):
     def updateYamlPathVals(
         self, yaml: dict[str, YamlValue], yaml_key_list: list[str], rewrite_val: YamlValue
     ) -> dict[str, YamlValue]:
+        """
+        Set the value at a nested path, creating intermediate dictionaries as needed.
 
+        Consumes the path: the visited keys are popped off the given list.
+
+        Args:
+            yaml: The YAML data (or the nested part of it) to modify.
+            yaml_key_list: The path of keys leading to the value.
+            rewrite_val: The value to set at the end of the path.
+
+        Returns:
+            The modified YAML data.
+        """
         for key in yaml_key_list:
             if key == yaml_key_list[-1]:
                 yaml[key] = rewrite_val
@@ -196,6 +268,13 @@ class RewrittenYaml(launch.Substitution):
         return yaml
 
     def substitute_keys(self, yaml: dict[str, YamlValue], key_rewrites: dict[str, str]) -> None:
+        """
+        Rename keys in place, recursing into nested dictionaries.
+
+        Args:
+            yaml: The YAML data to modify.
+            key_rewrites: Mappings from a key to its replacement key.
+        """
         if len(key_rewrites) != 0:
             for key in list(yaml.keys()):
                 val = yaml[key]
@@ -206,9 +285,16 @@ class RewrittenYaml(launch.Substitution):
                 if isinstance(val, dict):
                     self.substitute_keys(val, key_rewrites)
 
-    def getYamlLeafKeys(
-        self, yamlData: dict[str, YamlValue]
-    ) -> Generator[DictItemReference, None, None]:
+    def getYamlLeafKeys(self, yamlData: dict[str, YamlValue]) -> Generator[DictItemReference]:
+        """
+        Iterate over all entries of a nested dictionary, including entries holding dictionaries.
+
+        Args:
+            yamlData: The YAML data to traverse.
+
+        Yields:
+            A reference to each entry, nested entries first.
+        """
         if not isinstance(yamlData, dict):
             return
 
@@ -223,11 +309,25 @@ class RewrittenYaml(launch.Substitution):
 
     def pathify(
         self,
-        d: Union[dict[str, YamlValue], list[YamlValue], YamlValue],
-        p: Optional[str] = None,
-        paths: Optional[dict[str, YamlValue]] = None,
+        d: dict[str, YamlValue] | list[YamlValue] | YamlValue,
+        p: str | None = None,
+        paths: dict[str, YamlValue] | None = None,
         joinchar: str = ".",
     ) -> dict[str, YamlValue]:
+        """
+        Flatten nested YAML data into a mapping from dotted path to leaf value.
+
+        List entries are addressed by their index, e.g. 'a.b.0.c'.
+
+        Args:
+            d: The YAML data to flatten.
+            p: The path prefix of the data. Leave unset when calling from outside.
+            paths: The mapping to fill. Leave unset when calling from outside.
+            joinchar: The character joining the path elements.
+
+        Returns:
+            Mapping from the path of each leaf to its value.
+        """
         if p is None:
             paths = {}
             self.pathify(d, "", paths, joinchar=joinchar)
@@ -249,6 +349,18 @@ class RewrittenYaml(launch.Substitution):
         return paths
 
     def convert(self, text_value: str) -> YamlValue:
+        """
+        Convert a string to a number or boolean where possible.
+
+        Numbers are only converted if type conversion was enabled. 'true' and 'false'
+        (case-insensitive) are always converted to booleans.
+
+        Args:
+            text_value: The string to convert.
+
+        Returns:
+            The int, float or bool the string represents, otherwise the unchanged string.
+        """
         if self.__convert_types:
             # try converting to int or float
             try:
