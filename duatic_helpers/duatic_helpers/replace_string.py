@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import tempfile
-from typing import IO, Optional
+from typing import TYPE_CHECKING
 
 import launch
+
+if TYPE_CHECKING:
+    from typing import IO
 
 
 class ReplaceString(launch.Substitution):
@@ -29,8 +34,16 @@ class ReplaceString(launch.Substitution):
         self,
         source_file: launch.SomeSubstitutionsType,
         replacements: dict[str, launch.SomeSubstitutionsType],
-        condition: Optional[launch.Condition] = None,
+        condition: launch.Condition | None = None,
     ) -> None:
+        """
+        Construct the substitution.
+
+        Args:
+            source_file: The file in which to replace strings.
+            replacements: Mapping from the string to find to the string to replace it with.
+            condition: If given and it evaluates to false, the source file is used unchanged.
+        """
         super().__init__()
 
         from launch.utilities import normalize_to_list_of_substitutions
@@ -40,7 +53,7 @@ class ReplaceString(launch.Substitution):
         self.__source_file: list[launch.Substitution] = normalize_to_list_of_substitutions(
             source_file
         )
-        self.__replacements = {}
+        self.__replacements: dict[str, list[launch.Substitution]] = {}
         for key in replacements:
             self.__replacements[key] = normalize_to_list_of_substitutions(replacements[key])
         self.__condition = condition
@@ -51,7 +64,7 @@ class ReplaceString(launch.Substitution):
         return self.__source_file
 
     @property
-    def condition(self) -> Optional[launch.Condition]:
+    def condition(self) -> launch.Condition | None:
         """Getter for condition."""
         return self.__condition
 
@@ -60,6 +73,16 @@ class ReplaceString(launch.Substitution):
         return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
+        """
+        Write a copy of the source file with the replacements applied.
+
+        Args:
+            context: Launch context used to resolve the file name and the replacements.
+
+        Returns:
+            Path of the temporary file with the replacements applied, or the path of the
+            source file if the condition evaluates to false.
+        """
         yaml_filename: str = launch.utilities.perform_substitutions(context, self.name)
         if self.__condition is None or self.__condition.evaluate(context):
             output_file = tempfile.NamedTemporaryFile(mode="w", delete=False)
@@ -77,6 +100,15 @@ class ReplaceString(launch.Substitution):
             return yaml_filename
 
     def resolve_replacements(self, context: launch.LaunchContext) -> dict[str, str]:
+        """
+        Resolve the replacement substitutions to plain strings.
+
+        Args:
+            context: Launch context used to resolve the substitutions.
+
+        Returns:
+            Mapping from the string to find to its resolved replacement.
+        """
         resolved_replacements = {}
         for key in self.__replacements:
             resolved_replacements[key] = launch.utilities.perform_substitutions(
@@ -87,6 +119,17 @@ class ReplaceString(launch.Substitution):
     def replace(
         self, input_file: IO[str], output_file: IO[str], replacements: dict[str, str]
     ) -> None:
+        """
+        Copy the input file line by line to the output file, applying the replacements.
+
+        Args:
+            input_file: File to read from.
+            output_file: File to write the result to.
+            replacements: Mapping from the string to find to the string to replace it with.
+
+        Raises:
+            TypeError: If a key or value of the replacements is not a string.
+        """
         for line in input_file:
             for key, value in replacements.items():
                 if isinstance(key, str) and isinstance(value, str):

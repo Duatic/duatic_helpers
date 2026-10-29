@@ -24,13 +24,14 @@ class HasNodeParams(launch.Substitution):
     """
 
     def __init__(self, source_file: launch.SomeSubstitutionsType, node_name: str) -> None:
-        super().__init__()
         """
-    Construct the substitution
+        Construct the substitution.
 
-    :param: source_file the parameter YAML file
-    :param: node_name the name of the node to check
-    """
+        Args:
+            source_file: The parameter YAML file.
+            node_name: The name of the node to check, matched against the top-level YAML keys.
+        """
+        super().__init__()
 
         # import here to avoid loop
         from launch.utilities import normalize_to_list_of_substitutions
@@ -50,6 +51,15 @@ class HasNodeParams(launch.Substitution):
         return ""
 
     def perform(self, context: launch.LaunchContext) -> str:
+        """
+        Check whether the YAML file has a top-level entry for the node.
+
+        Args:
+            context: Launch context used to resolve the file name.
+
+        Returns:
+            'True' if the node name is a top-level key of the file, otherwise 'False'.
+        """
         yaml_filename = launch.utilities.perform_substitutions(context, self.name)
         data = yaml.safe_load(open(yaml_filename))
 

@@ -23,9 +23,11 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import rclpy
+from rclpy.parameter_client import AsyncParameterClient
 from controller_manager_msgs.srv import ListControllers, SwitchController
 
 if TYPE_CHECKING:
@@ -295,20 +297,73 @@ class DuaticControllerHelper:
 
         return False
 
-    def wait_for_controller_data(self, timeout_sec: float = 20.0) -> bool:
+    def wait_for_controller_data(self, timeout_sec: float = 20.0, polling_sec: float = 0.5) -> bool:
         """
-        Wait for controller data to be available, spinning the node meanwhile.
+        Wait for controller data to be available, spinning the node meanwhile only if needed.
 
         :param timeout_sec: How long to wait overall, in seconds.
+        :param polling_sec: Pause between two queries of the loaded controllers, in seconds.
 
         :returns: True if the controller data is available, False on timeout.
         """
-        import time
+        deadline = time.monotonic() + timeout_sec
 
-        start_time = time.time()
-        while not self._run_once and (time.time() - start_time) < timeout_sec:
-            rclpy.spin_once(self.node, timeout_sec=0.05)
-        return self._run_once
+        # Get the declared controllers from the controller manager's parameters.
+        # All parameters are declared at once when the controller manager starts
+        controller_manager_path = (
+            f"/{self.robot_namespace}" if self.robot_namespace else ""
+        ) + "/controller_manager"
+        param_client = AsyncParameterClient(self.node, controller_manager_path)
+        remaining_sec = max(deadline - time.monotonic(), 0.0)
+        if not param_client.wait_for_services(timeout_sec=remaining_sec):
+            self.node.get_logger().error(
+                f"Parameter services of '{controller_manager_path}' not available within {remaining_sec}s"
+            )
+            return False
+        future = param_client.list_parameters()
+        if not self._wait_until_future_complete(future, deadline):
+            self.node.get_logger().error(
+                f"Could not list the parameters of '{controller_manager_path}'"
+            )
+            return False
+
+        # Every controller entry has a '<name>.type', unlike the other (nested) parameters
+        expected = [n[: -len(".type")] for n in future.result().result.names if n.endswith(".type")]
+
+        # Check which of the expected controllers are loaded, and wait until all are found (or time out)
+        missing = set(expected)
+        while missing and time.monotonic() < deadline:
+            future = self.controller_client.call_async(ListControllers.Request())
+            if self._wait_until_future_complete(future, deadline):
+                self._update_controllers(future.result())
+                missing = set(expected) - {ctrl.name for ctrl in future.result().controller}
+            if missing:
+                time.sleep(polling_sec)
+
+        if missing:
+            self.node.get_logger().error(
+                f"Controllers declared but not loaded after {timeout_sec}s: {sorted(missing)}"
+            )
+        return not missing
+
+    def _wait_until_future_complete(self, future: Future, deadline: float) -> bool:
+        """
+        Waits for the future until the deadline. Only spins the node if it is not already spun by an executor.
+
+        :param future: The future to wait for.
+        :param deadline: Point in time to wait until, as time.monotonic() value.
+
+        :returns: True if the future completed.
+        """
+        if not getattr(self.node.executor, "is_spinning", False):
+            # Nobody spins the node (e.g. during construction), so spin it here
+            remaining_sec = max(deadline - time.monotonic(), 0.0)
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=remaining_sec)
+        else:
+            # The node is already spun by its executor, which will complete the future
+            while not future.done() and time.monotonic() < deadline:
+                time.sleep(0.01)
+        return future.done()
 
     def _get_all_controllers(self) -> None:
         """Asynchronously fetches all controllers and their states, and updates the snapshot."""
@@ -324,79 +379,83 @@ class DuaticControllerHelper:
         def callback(future: Future) -> None:
             if future.done():
                 try:
-                    response = future.result()
-
-                    # Get current controllers from response
-                    current_controllers = {ctrl.name: ctrl.state for ctrl in response.controller}
-
-                    # Clear active controllers
-                    self.active_low_level_controllers.clear()
-
-                    # Rebuild found_controllers_by_base with only currently existing controllers
-                    new_found_controllers = {}
-
-                    # Check each controller in the whitelist
-                    for base in self.controller_whitelist:
-                        controllers_for_base = []
-
-                        # Find all controllers that match this base
-                        for controller_name, state in current_controllers.items():
-                            if controller_name.startswith(base):
-                                controllers_for_base.append({controller_name: state})
-
-                                # Add to active list if active
-                                if state == "active":
-                                    self.active_low_level_controllers.append(controller_name)
-
-                        # Only add to found_controllers if we actually found controllers for this base
-                        if controllers_for_base:
-                            new_found_controllers[base] = controllers_for_base
-
-                    # Replace the old dictionary with the new one
-                    self._found_controllers_by_base = new_found_controllers
-
-                    # Handle freeze controller separately (E-Stop)
-                    # User rule: If only one freeze controller exists, it's the global one.
-                    # If multiple exist, we prioritize 'freeze_controller'.
-                    freeze_ctrls = {
-                        name: state
-                        for name, state in current_controllers.items()
-                        if name.startswith("freeze_controller")
-                    }
-
-                    if len(freeze_ctrls) == 1:
-                        # Single freeze controller -> Global E-Stop
-                        self._is_freeze_active = list(freeze_ctrls.values())[0] == "active"
-                    elif len(freeze_ctrls) > 1:
-                        # Multiple freeze controllers -> Prioritize exact name
-                        if "freeze_controller" in freeze_ctrls:
-                            self._is_freeze_active = freeze_ctrls["freeze_controller"] == "active"
-                        else:
-                            # Fallback to the first one found if no exact match
-                            self.node.get_logger().debug(
-                                f"Multiple freeze controllers found {list(freeze_ctrls.keys())}, but no exact 'freeze_controller'. Using first one for E-Stop."
-                            )
-                            self._is_freeze_active = list(freeze_ctrls.values())[0] == "active"
-                    else:
-                        self._is_freeze_active = False
-
-                    # Log controller changes (optional)
-                    if self._run_once:
-                        available_bases = list(self._found_controllers_by_base.keys())
-                        missing_bases = [
-                            base
-                            for base in self.controller_whitelist
-                            if base not in available_bases
-                        ]
-
-                        if missing_bases:
-                            self.node.get_logger().debug(
-                                f"Controller bases not found: {missing_bases}"
-                            )
-
-                    self._run_once = True
-
+                    self._update_controllers(future.result())
                 except Exception as e:
                     self.node.get_logger().error(f"Error fetching controllers: {e}")
 
         future.add_done_callback(callback)
+
+    def _update_controllers(self, response: ListControllers.Response) -> None:
+        """
+        Updates the controller snapshot from a ListControllers response.
+
+        Rebuilds the whitelisted controllers by base name, the list of active controllers and
+        the state of the freeze controller.
+
+        :param response: Response of the list_controllers service.
+        """
+        # Get current controllers from response
+        current_controllers = {ctrl.name: ctrl.state for ctrl in response.controller}
+
+        # Clear active controllers
+        self.active_low_level_controllers.clear()
+
+        # Rebuild found_controllers_by_base with only currently existing controllers
+        new_found_controllers = {}
+
+        # Check each controller in the whitelist
+        for base in self.controller_whitelist:
+            controllers_for_base = []
+
+            # Find all controllers that match this base
+            for controller_name, state in current_controllers.items():
+                if controller_name.startswith(base):
+                    controllers_for_base.append({controller_name: state})
+
+                    # Add to active list if active
+                    if state == "active":
+                        self.active_low_level_controllers.append(controller_name)
+
+            # Only add to found_controllers if we actually found controllers for this base
+            if controllers_for_base:
+                new_found_controllers[base] = controllers_for_base
+
+        # Replace the old dictionary with the new one
+        self._found_controllers_by_base = new_found_controllers
+
+        # Handle freeze controller separately (E-Stop)
+        # User rule: If only one freeze controller exists, it's the global one.
+        # If multiple exist, we prioritize 'freeze_controller'.
+        freeze_ctrls = {
+            name: state
+            for name, state in current_controllers.items()
+            if name.startswith("freeze_controller")
+        }
+
+        if len(freeze_ctrls) == 1:
+            # Single freeze controller -> Global E-Stop
+            self._is_freeze_active = list(freeze_ctrls.values())[0] == "active"
+        elif len(freeze_ctrls) > 1:
+            # Multiple freeze controllers -> Prioritize exact name
+            if "freeze_controller" in freeze_ctrls:
+                self._is_freeze_active = freeze_ctrls["freeze_controller"] == "active"
+            else:
+                # Fallback to the first one found if no exact match
+                self.node.get_logger().debug(
+                    f"Multiple freeze controllers found {list(freeze_ctrls.keys())}, but no exact 'freeze_controller'. Using first one for E-Stop."
+                )
+                self._is_freeze_active = list(freeze_ctrls.values())[0] == "active"
+        else:
+            self._is_freeze_active = False
+
+        # Log controller changes (optional)
+        if self._run_once:
+            available_bases = list(self._found_controllers_by_base.keys())
+            missing_bases = [
+                base for base in self.controller_whitelist if base not in available_bases
+            ]
+
+            if missing_bases:
+                self.node.get_logger().debug(f"Controller bases not found: {missing_bases}")
+
+        self._run_once = True
