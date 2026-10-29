@@ -44,8 +44,7 @@ class DuaticJTCHelper:
         """
         Construct the helper.
 
-        Args:
-            node: Node used to query the ROS graph and the controllers' parameters.
+        :param node: Node used to query the ROS graph and the controllers' parameters.
         """
         self.node = node
         self.duatic_param_helper = DuaticParamHelper(self.node)
@@ -60,12 +59,10 @@ class DuaticJTCHelper:
         parameter is read. Topics for which no non-empty 'joints' parameter is found are
         skipped.
 
-        Args:
-            found_topics: Topic names with their types, e.g. as returned by
-                find_topics_for_controller().
+        :param found_topics: Topic names with their types, e.g. as returned by
+            find_topics_for_controller().
 
-        Returns:
-            Tuple of a mapping from topic to the joint names of its controller, and a mapping
+        :returns: Tuple of a mapping from topic to the joint names of its controller, and a mapping
             from topic to an empty placeholder for the commanded positions of that topic, which
             the caller is expected to fill.
         """
@@ -138,13 +135,11 @@ class DuaticJTCHelper:
         """
         Get topic names and types, filtering by a given name pattern.
 
-        Args:
-            by_name: Pattern to search for in the topic names. If it contains '*', each '*'
-                matches any characters and the pattern is searched as a regular expression,
-                with a leading '/' added if missing. Otherwise it is matched literally.
+        :param by_name: Pattern to search for in the topic names. If it contains '*', each '*'
+            matches any characters and the pattern is searched as a regular expression,
+            with a leading '/' added if missing. Otherwise it is matched literally.
 
-        Returns:
-            Topic names with their types, for all topics that match the pattern.
+        :returns: Topic names with their types, for all topics that match the pattern.
         """
         # Convert wildcard pattern to regex pattern
         # Handle the specific case where we search for controller patterns
@@ -174,14 +169,12 @@ class DuaticJTCHelper:
 
         Retries for up to 10 s until at least as many topics as component names are found.
 
-        Args:
-            controller_name: Name prefix of the controllers, e.g. 'joint_trajectory_controller'.
-            identifier: Last topic segment to look for, e.g. 'joint_trajectory'.
-            component_names: Component names that the controller namespaces must end with
-                (an empty name matches every controller).
+        :param controller_name: Name prefix of the controllers, e.g. 'joint_trajectory_controller'.
+        :param identifier: Last topic segment to look for, e.g. 'joint_trajectory'.
+        :param component_names: Component names that the controller namespaces must end with
+            (an empty name matches every controller).
 
-        Returns:
-            Topic names with their types, or an empty list if no component names were given or
+        :returns: Topic names with their types, or an empty list if no component names were given or
             fewer topics than component names were found.
         """
         if not component_names:

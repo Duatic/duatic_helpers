@@ -59,11 +59,10 @@ class DuaticPinocchioHelper:
         """
         Construct the helper and load the Pinocchio model.
 
-        Args:
-            node: Node used for parameter access and logging.
-            robot_id: Identifier of the robot, stored as an attribute.
-            joint_margins: Margin to the model's position limits that the IK solver keeps, in
-                rad (or m for prismatic joints).
+        :param node: Node used for parameter access and logging.
+        :param robot_id: Identifier of the robot, stored as an attribute.
+        :param joint_margins: Margin to the model's position limits that the IK solver keeps, in
+            rad (or m for prismatic joints).
         """
         self.node = node
         self.robot_id = robot_id
@@ -84,16 +83,14 @@ class DuaticPinocchioHelper:
         """
         Compute forward kinematics for the specified frame.
 
-        Args:
-            current_joint_values: Joint positions, either by joint name or as a vector in the
-                order of the model's configuration vector (padded with zeros if too short).
-            frame: Name of the frame to compute the pose of.
-            target_frame: If given, the pose is expressed in this frame instead of the model
-                root frame. If the transformation fails, the pose in the model root frame is
-                returned.
+        :param current_joint_values: Joint positions, either by joint name or as a vector in the
+            order of the model's configuration vector (padded with zeros if too short).
+        :param frame: Name of the frame to compute the pose of.
+        :param target_frame: If given, the pose is expressed in this frame instead of the model
+            root frame. If the transformation fails, the pose in the model root frame is
+            returned.
 
-        Returns:
-            Pose of the frame in the target frame, or in the model root frame if no target
+        :returns: Pose of the frame in the target frame, or in the model root frame if no target
             frame is given.
         """
         # Convert input to proper numpy array
@@ -141,13 +138,11 @@ class DuaticPinocchioHelper:
 
         The header of the returned message is left empty.
 
-        Args:
-            current_joint_values: Joint positions, see get_fk().
-            frame: Name of the frame to compute the pose of.
-            target_frame: Frame to express the pose in, see get_fk().
+        :param current_joint_values: Joint positions, see get_fk().
+        :param frame: Name of the frame to compute the pose of.
+        :param target_frame: Frame to express the pose in, see get_fk().
 
-        Returns:
-            Pose of the frame as returned by get_fk().
+        :returns: Pose of the frame as returned by get_fk().
         """
         current_pose = self.get_fk(current_joint_values, frame, target_frame)
 
@@ -179,18 +174,16 @@ class DuaticPinocchioHelper:
         Iterates pseudo-inverse steps on the frame Jacobian (with a gain of 0.1), clipping the
         joints to the model limits shrunk by the joint margins.
 
-        Args:
-            current_joint_values: Joint positions to start from, see get_fk().
-            target_SE3: Target pose of the frame, expressed in the target frame (or in the
-                model root frame if no target frame is given).
-            frame: Name of the frame to move to the target pose.
-            target_frame: Frame the target pose is expressed in, or None for the model root
-                frame.
-            iterations: Maximum number of iterations.
-            threshold: Norm of the (rotation-scaled) pose error below which the solver stops.
+        :param current_joint_values: Joint positions to start from, see get_fk().
+        :param target_SE3: Target pose of the frame, expressed in the target frame (or in the
+            model root frame if no target frame is given).
+        :param frame: Name of the frame to move to the target pose.
+        :param target_frame: Frame the target pose is expressed in, or None for the model root
+            frame.
+        :param iterations: Maximum number of iterations.
+        :param threshold: Norm of the (rotation-scaled) pose error below which the solver stops.
 
-        Returns:
-            Tuple of the full joint configuration vector and the pose error (6D, rotation part
+        :returns: Tuple of the full joint configuration vector and the pose error (6D, rotation part
             scaled) of the last iteration.
         """
         error = np.inf
@@ -252,14 +245,12 @@ class DuaticPinocchioHelper:
         """
         Compute pose error between current and target pose.
 
-        Args:
-            q: Joint positions, see get_fk().
-            target_SE3: Target pose of the frame, expressed in the target frame.
-            frame: Name of the frame to compute the error of.
-            target_frame: Frame the poses are expressed in, or None for the model root frame.
+        :param q: Joint positions, see get_fk().
+        :param target_SE3: Target pose of the frame, expressed in the target frame.
+        :param frame: Name of the frame to compute the error of.
+        :param target_frame: Frame the poses are expressed in, or None for the model root frame.
 
-        Returns:
-            Pose error as 6D vector (translation, then rotation scaled by 0.2 to balance the
+        :returns: Pose error as 6D vector (translation, then rotation scaled by 0.2 to balance the
             two parts), as the logarithm of the transform from target to current pose.
         """
         current_SE3 = self.get_fk(q, frame, target_frame)
@@ -273,11 +264,9 @@ class DuaticPinocchioHelper:
         """
         Convert a PoseStamped message to a Pinocchio SE3 object.
 
-        Args:
-            pose_stamped: Pose to convert. Its header is ignored.
+        :param pose_stamped: Pose to convert. Its header is ignored.
 
-        Returns:
-            The pose as SE3.
+        :returns: The pose as SE3.
         """
         pos = pose_stamped.pose.position
         ori = pose_stamped.pose.orientation
@@ -291,8 +280,7 @@ class DuaticPinocchioHelper:
 
         Uses the URDF from the parameter server, falling back to the DynaArm example URDF.
 
-        Returns:
-            The Pinocchio model, also stored as the model attribute.
+        :returns: The Pinocchio model, also stored as the model attribute.
         """
         # Try to get URDF from parameter server first (preferred)
         urdf_xml = self.get_robot_urdf_from_param()
@@ -318,11 +306,9 @@ class DuaticPinocchioHelper:
         """
         Write URDF XML string to a temporary file.
 
-        Args:
-            urdf_xml: The URDF as XML string.
+        :param urdf_xml: The URDF as XML string.
 
-        Returns:
-            Path of the temporary file, which is not deleted automatically.
+        :returns: Path of the temporary file, which is not deleted automatically.
         """
         with tempfile.NamedTemporaryFile(delete=False, suffix=".urdf") as urdf_file:
             urdf_file.write(urdf_xml.encode())
@@ -332,8 +318,7 @@ class DuaticPinocchioHelper:
         """
         Fallback method to get default DynaArm URDF if parameter server fails.
 
-        Returns:
-            Path of a temporary file with the URDF, or None if it could not be loaded.
+        :returns: Path of a temporary file with the URDF, or None if it could not be loaded.
         """
         package_share_desc_name = "dynaarm_single_example_description"
         urdf_name = "dynaarm_single_example.urdf.xacro"
@@ -359,8 +344,7 @@ class DuaticPinocchioHelper:
         """
         Retrieve the robot URDF from the parameter server.
 
-        Returns:
-            The URDF XML string, or None if it could not be retrieved.
+        :returns: The URDF XML string, or None if it could not be retrieved.
         """
         return self.param_helper.get_urdf("robot_state_publisher", "robot_description")
 
@@ -373,12 +357,10 @@ class DuaticPinocchioHelper:
         Indexes q by the position of the joint in the model's joint list, i.e. assumes
         single-DOF joints.
 
-        Args:
-            q: Joint positions in the order of the model's joints.
-            joint_names: Names of the joints to extract.
+        :param q: Joint positions in the order of the model's joints.
+        :param joint_names: Names of the joints to extract.
 
-        Returns:
-            The values of the requested joints, 0.0 for joints that are not in the model.
+        :returns: The values of the requested joints, 0.0 for joints that are not in the model.
         """
         joint_values = []
         all_joint_names = [name for name in self.model.names[1:]]  # Skip universe joint
@@ -399,12 +381,10 @@ class DuaticPinocchioHelper:
         """
         Extract joint values from q array for joints starting with arm_prefix.
 
-        Args:
-            q: Joint positions in the order of the model's joints.
-            arm_prefix: Prefix of the joint names, without the trailing '/'.
+        :param q: Joint positions in the order of the model's joints.
+        :param arm_prefix: Prefix of the joint names, without the trailing '/'.
 
-        Returns:
-            Tuple of the values and the names of the joints named '<arm_prefix>/...'.
+        :returns: Tuple of the values and the names of the joints named '<arm_prefix>/...'.
         """
         joint_values = []
         joint_names = []
@@ -421,8 +401,7 @@ class DuaticPinocchioHelper:
         """
         Get all joint names from the model (excluding universe joint).
 
-        Returns:
-            The joint names in the order of the model.
+        :returns: The joint names in the order of the model.
         """
         return [name for name in self.model.names[1:]]
 
@@ -432,13 +411,11 @@ class DuaticPinocchioHelper:
         """
         Convert joint values (dict or array) to a proper numpy array for Pinocchio.
 
-        Args:
-            current_joint_values: Joint positions, either by joint name (missing joints are set
-                to 0.0) or as a sequence in the order of the model's configuration vector
-                (padded with zeros if too short).
+        :param current_joint_values: Joint positions, either by joint name (missing joints are set
+            to 0.0) or as a sequence in the order of the model's configuration vector
+            (padded with zeros if too short).
 
-        Returns:
-            The configuration vector.
+        :returns: The configuration vector.
         """
         if isinstance(current_joint_values, dict):
             # Create full joint configuration array from dictionary

@@ -53,8 +53,7 @@ class DuaticRobotsHelper:
         """
         Construct the helper, subscribe to 'joint_states' and read the URDF.
 
-        Args:
-            node: Node used for the subscription, service client and logging.
+        :param node: Node used for the subscription, service client and logging.
         """
         self.node = node
 
@@ -145,11 +144,9 @@ class DuaticRobotsHelper:
         is computed from the joint it follows rather than measured. An unparsable URDF
         yields an empty set, which wait_for_robot() reports as a check it could not run.
 
-        Args:
-            urdf_raw: The URDF as XML string.
+        :param urdf_raw: The URDF as XML string.
 
-        Returns:
-            Names of the joints expected on /joint_states.
+        :returns: Names of the joints expected on /joint_states.
         """
         try:
             root = ET.fromstring(urdf_raw)
@@ -173,8 +170,7 @@ class DuaticRobotsHelper:
         """
         URDF joints not yet seen on /joint_states.
 
-        Returns:
-            Names of the expected joints that have not been received yet.
+        :returns: Names of the expected joints that have not been received yet.
         """
         return self._expected_joints - set(self._joint_states)
 
@@ -184,9 +180,8 @@ class DuaticRobotsHelper:
 
         The cache only grows: a publisher that goes away leaves its last values behind.
 
-        Args:
-            msg: The received joint state. Messages without positions, or with a different
-                number of names and positions, are ignored.
+        :param msg: The received joint state. Messages without positions, or with a different
+            number of names and positions, are ignored.
         """
         if not msg.position:
             # Legal per sensor_msgs/JointState: a publisher may send only velocity or
@@ -222,8 +217,7 @@ class DuaticRobotsHelper:
         """
         Returns a dictionary of joint names and their positions.
 
-        Returns:
-            Snapshot of the joint positions by joint name. It is replaced, not modified, on
+        :returns: Snapshot of the joint positions by joint name. It is replaced, not modified, on
             new messages, so it is safe to iterate.
         """
         return self._joint_states
@@ -232,11 +226,9 @@ class DuaticRobotsHelper:
         """
         Get the current position value for a specific joint from joint states.
 
-        Args:
-            joint_name: Name of the joint.
+        :param joint_name: Name of the joint.
 
-        Returns:
-            The joint position, or 0.0 (with a warning) if the joint has not been seen.
+        :returns: The joint position, or 0.0 (with a warning) if the joint has not been seen.
         """
         if joint_name in self._joint_states:
             return self._joint_states[joint_name]
@@ -248,12 +240,10 @@ class DuaticRobotsHelper:
         """
         Returns a list of component names, optionally filtered by type.
 
-        Args:
-            filter_by_type: Only return components of this type (e.g. 'arm', 'platform').
-                If None, all components are returned.
+        :param filter_by_type: Only return components of this type (e.g. 'arm', 'platform').
+            If None, all components are returned.
 
-        Returns:
-            The component names, empty if no robot was detected yet.
+        :returns: The component names, empty if no robot was detected yet.
         """
         if self._robot_count <= 0:
             self.node.get_logger().error("No robots detected. Cannot get component names.")
@@ -275,8 +265,7 @@ class DuaticRobotsHelper:
         """
         Returns a dictionary of robots with their detected components.
 
-        Returns:
-            Mapping from robot id to component name to a dictionary with the component 'type'
+        :returns: Mapping from robot id to component name to a dictionary with the component 'type'
             and the sorted names of its 'joints'. Empty if no joint states were received.
         """
         if not self._joint_states:
@@ -312,11 +301,9 @@ class DuaticRobotsHelper:
         """
         Parse a joint name to extract robot ID, component name, and component type.
 
-        Args:
-            joint_name: Name of the joint, e.g. 'arm_left/shoulder_rotation'.
+        :param joint_name: Name of the joint, e.g. 'arm_left/shoulder_rotation'.
 
-        Returns:
-            Tuple of the robot id, the component name and the component type.
+        :returns: Tuple of the robot id, the component name and the component type.
         """
         # Handle different joint naming patterns
 
@@ -346,11 +333,9 @@ class DuaticRobotsHelper:
         """
         Get the number of components detected.
 
-        Args:
-            component_type: Type of the components to count (e.g. 'arm', 'platform').
+        :param component_type: Type of the components to count (e.g. 'arm', 'platform').
 
-        Returns:
-            The number of components of this type, 0 if no robot was detected yet.
+        :returns: The number of components of this type, 0 if no robot was detected yet.
         """
         if self._robot_count <= 0:
             self.node.get_logger().error("No robots detected. Cannot get component count.")
@@ -371,11 +356,9 @@ class DuaticRobotsHelper:
         Waiting for the first message alone is not enough: it proves one publisher is up,
         not that all the components are among them.
 
-        Args:
-            timeout_sec: How long to wait for the full joint set, in seconds.
+        :param timeout_sec: How long to wait for the full joint set, in seconds.
 
-        Returns:
-            True once every expected joint has arrived, False on timeout.
+        :returns: True once every expected joint has arrived, False on timeout.
         """
         deadline = time.monotonic() + float(timeout_sec)
         while time.monotonic() < deadline:
@@ -412,13 +395,11 @@ class DuaticRobotsHelper:
         Note: _is_robot_ready() never returns True, so this currently always returns an empty
         list.
 
-        Args:
-            robot_id: Id of the robot.
-            component_type: Key of the component group in the robot's components.
-            component_name: Name of the component.
+        :param robot_id: Id of the robot.
+        :param component_type: Key of the component group in the robot's components.
+        :param component_name: Name of the component.
 
-        Returns:
-            The joint names of the component, empty if it is not ready.
+        :returns: The joint names of the component, empty if it is not ready.
         """
         if not self._is_robot_ready(robot_id, component_type, component_name):
             return []
@@ -437,13 +418,11 @@ class DuaticRobotsHelper:
         Note: _is_robot_ready() never returns True, so this currently always returns an empty
         dictionary.
 
-        Args:
-            robot_id: Id of the robot.
-            component_type: Key of the component group in the robot's components.
-            component_name: Name of the component.
+        :param robot_id: Id of the robot.
+        :param component_type: Key of the component group in the robot's components.
+        :param component_name: Name of the component.
 
-        Returns:
-            Joint positions by joint name for the component's joints, empty if it is not ready.
+        :returns: Joint positions by joint name for the component's joints, empty if it is not ready.
         """
         if not self._is_robot_ready(robot_id, component_type, component_name):
             return {}
@@ -461,13 +440,11 @@ class DuaticRobotsHelper:
         """
         Check if the robot is ready by verifying joint states.
 
-        Args:
-            robot_id: Id of the robot.
-            component_type: Key of the component group in the robot's components.
-            component_name: Name of the component.
+        :param robot_id: Id of the robot.
+        :param component_type: Key of the component group in the robot's components.
+        :param component_name: Name of the component.
 
-        Returns:
-            False (with an error log) if the robot or component was not found. Falls through
+        :returns: False (with an error log) if the robot or component was not found. Falls through
             to None if all checks pass, so the result is falsy in every case.
         """
         if self._robot_count <= 0:
@@ -492,8 +469,7 @@ class DuaticRobotsHelper:
 
         Checks the plugin names of the hardware components for 'mock', 'fake' and 'gazebo'.
 
-        Returns:
-            True if a simulated hardware component was found, False for real hardware or if
+        :returns: True if a simulated hardware component was found, False for real hardware or if
             the hardware components could not be listed.
         """
         is_simulation = False
@@ -540,8 +516,7 @@ class DuaticRobotsHelper:
         Also stores the result of the simulation check and the period as the attributes
         is_simulation and dt.
 
-        Returns:
-            The period in seconds: 0.05 in simulation, 0.001 on real hardware.
+        :returns: The period in seconds: 0.05 in simulation, 0.001 on real hardware.
         """
         self.is_simulation = self.check_simulation_mode()
 
