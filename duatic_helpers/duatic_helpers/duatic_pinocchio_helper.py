@@ -21,9 +21,12 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import os
 import xacro
 import tempfile
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pinocchio as pin
@@ -32,11 +35,35 @@ from duatic_helpers.duatic_param_helper import DuaticParamHelper
 from geometry_msgs.msg import PoseStamped
 from ament_index_python import get_package_share_directory
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from typing import TypeAlias
+
+    import numpy.typing as npt
+    from rclpy.node import Node
+
+    # Joint positions, either by joint name or in the order of the model's configuration vector
+    JointValues: TypeAlias = "dict[str, float] | Sequence[float] | npt.NDArray"
+
 
 class DuaticPinocchioHelper:
-    """A simple class to retrieve the robot URDF from the parameter server."""
+    """
+    Helper class that builds a Pinocchio model of the robot and computes its kinematics.
 
-    def __init__(self, node, robot_id="robot", joint_margins=0.2):
+    The model is built from the URDF on the parameter server, with a DynaArm example URDF as
+    fallback. Provides forward kinematics, an iterative inverse kinematics solver and
+    conversions between ROS poses and Pinocchio types.
+    """
+
+    def __init__(self, node: Node, robot_id: str = "robot", joint_margins: float = 0.2) -> None:
+        """
+        Construct the helper and load the Pinocchio model.
+
+        :param node: Node used for parameter access and logging.
+        :param robot_id: Identifier of the robot, stored as an attribute.
+        :param joint_margins: Margin to the model's position limits that the IK solver keeps, in
+            rad (or m for prismatic joints).
+        """
         self.node = node
         self.robot_id = robot_id
         self.param_helper = DuaticParamHelper(self.node)
@@ -47,8 +74,25 @@ class DuaticPinocchioHelper:
         self.lower = self.model.lowerPositionLimit + joint_margins
         self.upper = self.model.upperPositionLimit - joint_margins
 
-    def get_fk(self, current_joint_values, frame, target_frame=None):
-        """Compute forward kinematics for the specified arm."""
+    def get_fk(
+        self,
+        current_joint_values: JointValues,
+        frame: str,
+        target_frame: str | None = None,
+    ) -> pin.SE3:
+        """
+        Compute forward kinematics for the specified frame.
+
+        :param current_joint_values: Joint positions, either by joint name or as a vector in the
+            order of the model's configuration vector (padded with zeros if too short).
+        :param frame: Name of the frame to compute the pose of.
+        :param target_frame: If given, the pose is expressed in this frame instead of the model
+            root frame. If the transformation fails, the pose in the model root frame is
+            returned.
+
+        :returns: Pose of the frame in the target frame, or in the model root frame if no target
+            frame is given.
+        """
         # Convert input to proper numpy array
         q = self._convert_joint_values_to_array(current_joint_values)
 
@@ -83,8 +127,23 @@ class DuaticPinocchioHelper:
 
         return pose
 
-    def get_fk_as_pose_stamped(self, current_joint_values, frame, target_frame=None):
+    def get_fk_as_pose_stamped(
+        self,
+        current_joint_values: JointValues,
+        frame: str,
+        target_frame: str | None = None,
+    ) -> PoseStamped:
+        """
+        Compute forward kinematics for the specified frame as a PoseStamped message.
 
+        The header of the returned message is left empty.
+
+        :param current_joint_values: Joint positions, see get_fk().
+        :param frame: Name of the frame to compute the pose of.
+        :param target_frame: Frame to express the pose in, see get_fk().
+
+        :returns: Pose of the frame as returned by get_fk().
+        """
         current_pose = self.get_fk(current_joint_values, frame, target_frame)
 
         pose_stamped = PoseStamped()
@@ -101,9 +160,32 @@ class DuaticPinocchioHelper:
         return pose_stamped
 
     def solve_ik(
-        self, current_joint_values, target_SE3, frame, target_frame, iterations=100, threshold=0.01
-    ):
-        """Solve IK for the specified arm, but work with full joint configuration."""
+        self,
+        current_joint_values: JointValues,
+        target_SE3: pin.SE3,
+        frame: str,
+        target_frame: str | None,
+        iterations: int = 100,
+        threshold: float = 0.01,
+    ) -> tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+        """
+        Solve IK for the specified frame, but work with full joint configuration.
+
+        Iterates pseudo-inverse steps on the frame Jacobian (with a gain of 0.1), clipping the
+        joints to the model limits shrunk by the joint margins.
+
+        :param current_joint_values: Joint positions to start from, see get_fk().
+        :param target_SE3: Target pose of the frame, expressed in the target frame (or in the
+            model root frame if no target frame is given).
+        :param frame: Name of the frame to move to the target pose.
+        :param target_frame: Frame the target pose is expressed in, or None for the model root
+            frame.
+        :param iterations: Maximum number of iterations.
+        :param threshold: Norm of the (rotation-scaled) pose error below which the solver stops.
+
+        :returns: Tuple of the full joint configuration vector and the pose error (6D, rotation part
+            scaled) of the last iteration.
+        """
         error = np.inf
 
         # Convert input to proper numpy array (always full configuration)
@@ -153,8 +235,24 @@ class DuaticPinocchioHelper:
 
         return q, error
 
-    def get_pose_error(self, q, target_SE3, frame, target_frame=None):
-        """Compute pose error between current and target pose."""
+    def get_pose_error(
+        self,
+        q: JointValues,
+        target_SE3: pin.SE3,
+        frame: str,
+        target_frame: str | None = None,
+    ) -> npt.NDArray[np.floating]:
+        """
+        Compute pose error between current and target pose.
+
+        :param q: Joint positions, see get_fk().
+        :param target_SE3: Target pose of the frame, expressed in the target frame.
+        :param frame: Name of the frame to compute the error of.
+        :param target_frame: Frame the poses are expressed in, or None for the model root frame.
+
+        :returns: Pose error as 6D vector (translation, then rotation scaled by 0.2 to balance the
+            two parts), as the logarithm of the transform from target to current pose.
+        """
         current_SE3 = self.get_fk(q, frame, target_frame)
         error = pin.log(target_SE3.inverse() * current_SE3).vector
         # Scale rotation part (last 3 elements) to balance translation/rotation error
@@ -162,15 +260,28 @@ class DuaticPinocchioHelper:
         error[3:] *= rot_scale
         return error
 
-    def convert_pose_stamped_to_se3(self, pose_stamped):
-        """Convert a PoseStamped message to a Pinocchio SE3 object."""
+    def convert_pose_stamped_to_se3(self, pose_stamped: PoseStamped) -> pin.SE3:
+        """
+        Convert a PoseStamped message to a Pinocchio SE3 object.
+
+        :param pose_stamped: Pose to convert. Its header is ignored.
+
+        :returns: The pose as SE3.
+        """
         pos = pose_stamped.pose.position
         ori = pose_stamped.pose.orientation
         translation = np.array([pos.x, pos.y, pos.z])
         quat = np.array([ori.w, ori.x, ori.y, ori.z])
         return pin.SE3(pin.Quaternion(*quat).matrix(), translation)
 
-    def get_pin_model_data(self):
+    def get_pin_model_data(self) -> pin.Model:
+        """
+        Build the Pinocchio model from the robot URDF.
+
+        Uses the URDF from the parameter server, falling back to the DynaArm example URDF.
+
+        :returns: The Pinocchio model, also stored as the model attribute.
+        """
         # Try to get URDF from parameter server first (preferred)
         urdf_xml = self.get_robot_urdf_from_param()
 
@@ -191,14 +302,24 @@ class DuaticPinocchioHelper:
 
         return self.model
 
-    def _write_urdf_to_temp_file(self, urdf_xml):
-        """Write URDF XML string to a temporary file."""
+    def _write_urdf_to_temp_file(self, urdf_xml: str) -> str:
+        """
+        Write URDF XML string to a temporary file.
+
+        :param urdf_xml: The URDF as XML string.
+
+        :returns: Path of the temporary file, which is not deleted automatically.
+        """
         with tempfile.NamedTemporaryFile(delete=False, suffix=".urdf") as urdf_file:
             urdf_file.write(urdf_xml.encode())
             return urdf_file.name
 
-    def get_dynaarm_urdf(self):
-        """Fallback method to get default DynaArm URDF if parameter server fails."""
+    def get_dynaarm_urdf(self) -> str | None:
+        """
+        Fallback method to get default DynaArm URDF if parameter server fails.
+
+        :returns: Path of a temporary file with the URDF, or None if it could not be loaded.
+        """
         package_share_desc_name = "dynaarm_single_example_description"
         urdf_name = "dynaarm_single_example.urdf.xacro"
 
@@ -219,12 +340,28 @@ class DuaticPinocchioHelper:
             )
             return None
 
-    def get_robot_urdf_from_param(self):
-        """Retrieve the robot URDF from the parameter server."""
+    def get_robot_urdf_from_param(self) -> str | None:
+        """
+        Retrieve the robot URDF from the parameter server.
+
+        :returns: The URDF XML string, or None if it could not be retrieved.
+        """
         return self.param_helper.get_urdf("robot_state_publisher", "robot_description")
 
-    def get_joint_values_by_names(self, q, joint_names):
-        """Extract specific joint values from q array by joint names."""
+    def get_joint_values_by_names(
+        self, q: Sequence[float], joint_names: Sequence[str]
+    ) -> list[float]:
+        """
+        Extract specific joint values from q array by joint names.
+
+        Indexes q by the position of the joint in the model's joint list, i.e. assumes
+        single-DOF joints.
+
+        :param q: Joint positions in the order of the model's joints.
+        :param joint_names: Names of the joints to extract.
+
+        :returns: The values of the requested joints, 0.0 for joints that are not in the model.
+        """
         joint_values = []
         all_joint_names = [name for name in self.model.names[1:]]  # Skip universe joint
 
@@ -238,8 +375,17 @@ class DuaticPinocchioHelper:
 
         return joint_values
 
-    def get_joint_values_by_arm_prefix(self, q, arm_prefix):
-        """Extract joint values from q array for joints starting with arm_prefix."""
+    def get_joint_values_by_arm_prefix(
+        self, q: Sequence[float], arm_prefix: str
+    ) -> tuple[list[float], list[str]]:
+        """
+        Extract joint values from q array for joints starting with arm_prefix.
+
+        :param q: Joint positions in the order of the model's joints.
+        :param arm_prefix: Prefix of the joint names, without the trailing '/'.
+
+        :returns: Tuple of the values and the names of the joints named '<arm_prefix>/...'.
+        """
         joint_values = []
         joint_names = []
         all_joint_names = [name for name in self.model.names[1:]]  # Skip universe joint
@@ -251,12 +397,26 @@ class DuaticPinocchioHelper:
 
         return joint_values, joint_names
 
-    def get_all_joint_names(self):
-        """Get all joint names from the model (excluding universe joint)."""
+    def get_all_joint_names(self) -> list[str]:
+        """
+        Get all joint names from the model (excluding universe joint).
+
+        :returns: The joint names in the order of the model.
+        """
         return [name for name in self.model.names[1:]]
 
-    def _convert_joint_values_to_array(self, current_joint_values):
-        """Convert joint values (dict or array) to a proper numpy array for Pinocchio."""
+    def _convert_joint_values_to_array(
+        self, current_joint_values: JointValues
+    ) -> npt.NDArray[np.floating]:
+        """
+        Convert joint values (dict or array) to a proper numpy array for Pinocchio.
+
+        :param current_joint_values: Joint positions, either by joint name (missing joints are set
+            to 0.0) or as a sequence in the order of the model's configuration vector
+            (padded with zeros if too short).
+
+        :returns: The configuration vector.
+        """
         if isinstance(current_joint_values, dict):
             # Create full joint configuration array from dictionary
             q = np.zeros(self.model.nq)
