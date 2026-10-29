@@ -83,13 +83,12 @@ class DuaticControllerHelper:
 
         # Construct service paths with namespace
         base_path = f"/{self.robot_namespace}" if self.robot_namespace else ""
-        self._cm_base_path = f"{base_path}/controller_manager"
 
         self.controller_client = self.node.create_client(
-            ListControllers, f"{self._cm_base_path}/list_controllers"
+            ListControllers, f"{base_path}/controller_manager/list_controllers"
         )
         self.switch_controller_client = self.node.create_client(
-            SwitchController, f"{self._cm_base_path}/switch_controller"
+            SwitchController, f"{base_path}/controller_manager/switch_controller"
         )
 
         self.node.create_timer(0.1, self._get_all_controllers)
@@ -324,16 +323,21 @@ class DuaticControllerHelper:
 
         # Get the declared controllers from the controller manager's parameters.
         # All parameters are declared at once when the controller manager starts
+        controller_manager_path = (
+            f"/{self.robot_namespace}" if self.robot_namespace else ""
+        ) + "/controller_manager"
+        param_client = AsyncParameterClient(self.node, controller_manager_path)
         remaining_sec = max(deadline - time.monotonic(), 0.0)
-        param_client = AsyncParameterClient(self.node, self._cm_base_path)
         if not param_client.wait_for_services(timeout_sec=remaining_sec):
             self.node.get_logger().error(
-                f"Parameter services of {self._cm_base_path} not available within {remaining_sec}s"
+                f"Parameter services of '{controller_manager_path}' not available within {remaining_sec}s"
             )
             return False
         future = param_client.list_parameters()
         if not self._wait_until_future_complete(future, deadline):
-            self.node.get_logger().error(f"Could not list the parameters of {self._cm_base_path}")
+            self.node.get_logger().error(
+                f"Could not list the parameters of '{controller_manager_path}'"
+            )
             return False
 
         # Every controller entry has a '<name>.type', unlike the other (nested) parameters
