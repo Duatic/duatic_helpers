@@ -43,6 +43,7 @@ from .launch_helper import simulator_not_subcomponent_condition
 from .replace_string import ReplaceString
 from .rewritten_yaml import RewrittenYaml
 from .test_helper import (
+    wait_for_controller_states,
     wait_for_message,
     wait_for_node,
     wait_for_node_with_namespace,
@@ -58,6 +59,7 @@ __all__ = [
     "RewrittenYaml",
     "simulator_not_subcomponent_condition",
     # Test Helpers
+    "wait_for_controller_states",
     "wait_for_message",
     "wait_for_node",
     "wait_for_node_with_namespace",
