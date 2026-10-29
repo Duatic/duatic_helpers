@@ -27,6 +27,7 @@ import time
 from typing import TYPE_CHECKING
 
 import rclpy
+from controller_manager_msgs.srv import ListControllers
 
 if TYPE_CHECKING:
     from typing import Any
@@ -181,3 +182,47 @@ def wait_for_message(
 
     node.destroy_subscription(sub)
     assert received_msg, f"No message received on {topic_name} within {timeout} seconds."
+
+
+def wait_for_controller_states(
+    node: Node,
+    expected_states: dict[str, str],
+    controller_manager: str = "/controller_manager",
+    timeout: float = 10.0,
+) -> None:
+    """
+    Waits until the controllers report the expected states via the list_controllers service.
+
+    :param node: rclpy Node object used to create the temporary service client and to spin. It
+        must not be spun by an executor elsewhere.
+    :param expected_states: Expected state per controller name, as reported by ListControllers
+        (e.g. "active", "inactive"). Controllers not in this mapping are ignored.
+    :param controller_manager: Fully qualified name of the controller manager node.
+    :param timeout: How long to wait before failing, in seconds.
+
+    :raises AssertionError: If any controller is not in its expected state within the timeout. The
+        message names each mismatching controller with its actual state.
+    """
+    client = node.create_client(ListControllers, f"{controller_manager}/list_controllers")
+    actual_states: dict[str, str] = {}
+
+    start = time.time()
+    while time.time() - start < timeout:
+        if client.wait_for_service(timeout_sec=0.1):
+            future = client.call_async(ListControllers.Request())
+            rclpy.spin_until_future_complete(node, future, timeout_sec=1.0)
+            if future.done():
+                actual_states = {c.name: c.state for c in future.result().controller}
+                if actual_states.items() >= expected_states.items():
+                    break
+        time.sleep(0.1)
+
+    node.destroy_client(client)
+    mismatches = {
+        name: state for name, state in expected_states.items() if actual_states.get(name) != state
+    }
+    details = ", ".join(
+        f"{name} is {actual_states.get(name, 'not listed')} (expected {state})"
+        for name, state in sorted(mismatches.items())
+    )
+    assert not mismatches, f"Controllers not in expected state after {timeout} s: {details}"
