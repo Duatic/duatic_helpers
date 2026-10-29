@@ -40,8 +40,7 @@ class DuaticParamHelper:
         """
         Construct the helper.
 
-        Args:
-            node: Node used to create parameter clients and to spin while waiting.
+        :param node: Node used to create parameter clients and to spin while waiting.
         """
         self.node = node
 
@@ -53,13 +52,11 @@ class DuaticParamHelper:
 
         Spins the node while waiting, with a fixed 5 s timeout for the reply.
 
-        Args:
-            controller_ns: Name of the node that holds the parameter.
-            param_name: Name of the parameter to read.
-            timeout_sec: How long to wait for the node's parameter services, in seconds.
+        :param controller_ns: Name of the node that holds the parameter.
+        :param param_name: Name of the parameter to read.
+        :param timeout_sec: How long to wait for the node's parameter services, in seconds.
 
-        Returns:
-            The values of the requested parameters, or None if the services are not available,
+        :returns: The values of the requested parameters, or None if the services are not available,
             the request timed out or no value was returned.
         """
         param_client = AsyncParameterClient(self.node, controller_ns)
@@ -106,13 +103,11 @@ class DuaticParamHelper:
         If the node is not found under the given name, the ROS graph is searched for a single
         node with that base name in any namespace.
 
-        Args:
-            node_name: Name of the node holding the URDF. Pass the fully-qualified name to
-                select one robot if several nodes of the same name exist.
-            param_name: Name of the parameter holding the URDF.
+        :param node_name: Name of the node holding the URDF. Pass the fully-qualified name to
+            select one robot if several nodes of the same name exist.
+        :param param_name: Name of the parameter holding the URDF.
 
-        Returns:
-            The URDF XML string, or None if it could not be retrieved (not found, empty or
+        :returns: The URDF XML string, or None if it could not be retrieved (not found, empty or
             ambiguous).
         """
         try:

@@ -49,10 +49,9 @@ class DuaticControllerHelper:
         """
         Construct the helper, create the service clients and start the periodic update.
 
-        Args:
-            node: Node used to create the clients and the timer, and for logging.
-            robot_namespace: Namespace of the controller manager. If empty, the namespace of the
-                node is used.
+        :param node: Node used to create the clients and the timer, and for logging.
+        :param robot_namespace: Namespace of the controller manager. If empty, the namespace of the
+            node is used.
         """
         self.node = node
 
@@ -102,8 +101,7 @@ class DuaticControllerHelper:
         2. Empty string (default - for backward compatibility)
         3. URDF robot name (optional, from robot_description parameter)
 
-        Returns:
-            The namespace without leading and trailing slashes, empty if there is none.
+        :returns: The namespace without leading and trailing slashes, empty if there is none.
         """
         # Priority 1: Node namespace
         node_ns = self.node.get_namespace()
@@ -131,8 +129,7 @@ class DuaticControllerHelper:
         """
         Extract robot name from URDF robot_description parameter.
 
-        Returns:
-            The name of the robot, or an empty string if not found or on error.
+        :returns: The name of the robot, or an empty string if not found or on error.
         """
         try:
             from duatic_helpers.duatic_param_helper import (
@@ -167,12 +164,10 @@ class DuaticControllerHelper:
         """
         Returns the found controllers by base.
 
-        Args:
-            matching_names: If provided, only controllers whose base name or full name is in
-                this sequence are returned.
+        :param matching_names: If provided, only controllers whose base name or full name is in
+            this sequence are returned.
 
-        Returns:
-            Without matching names, the mapping from the whitelist base name to a list of
+        :returns: Without matching names, the mapping from the whitelist base name to a list of
             {controller name: state}. With matching names, the list of the names of the matching
             controllers.
         """
@@ -197,8 +192,7 @@ class DuaticControllerHelper:
         """
         Returns a list of currently active controllers.
 
-        Returns:
-            Names of the active whitelisted controllers. May be empty if timer hasn't run yet.
+        :returns: Names of the active whitelisted controllers. May be empty if timer hasn't run yet.
         """
         return self.active_low_level_controllers
 
@@ -206,8 +200,7 @@ class DuaticControllerHelper:
         """
         Checks if the freeze controller is currently active.
 
-        Returns:
-            True if it is active. Defaults to False if not yet determined.
+        :returns: True if it is active. Defaults to False if not yet determined.
         """
         return self._is_freeze_active
 
@@ -215,8 +208,7 @@ class DuaticControllerHelper:
         """
         Checks if controller data has been fetched.
 
-        Returns:
-            True if controller data has been fetched at least once.
+        :returns: True if controller data has been fetched at least once.
         """
         return self._run_once
 
@@ -229,9 +221,8 @@ class DuaticControllerHelper:
         Controllers that are already in the desired state are skipped, and nothing is sent if
         no change remains. The controller snapshot is refreshed once the switch succeeded.
 
-        Args:
-            activate_controllers: Names of the controllers to activate.
-            deactivate_controllers: Names of the controllers to deactivate.
+        :param activate_controllers: Names of the controllers to activate.
+        :param deactivate_controllers: Names of the controllers to deactivate.
         """
 
         if not activate_controllers and not deactivate_controllers:
@@ -289,12 +280,10 @@ class DuaticControllerHelper:
 
         Waits for the controller data first, which spins the node.
 
-        Args:
-            controller_name: Name of the controller.
-            timeout: How long to wait for the controller data, in seconds.
+        :param controller_name: Name of the controller.
+        :param timeout: How long to wait for the controller data, in seconds.
 
-        Returns:
-            True if the controller is among the found whitelisted controllers, False if not or
+        :returns: True if the controller is among the found whitelisted controllers, False if not or
             if the data did not arrive in time.
         """
         if not self.wait_for_controller_data(timeout_sec=timeout):
@@ -312,12 +301,10 @@ class DuaticControllerHelper:
         """
         Wait for controller data to be available, spinning the node meanwhile only if needed.
 
-        Args:
-            timeout_sec: How long to wait overall, in seconds.
-            polling_sec: Pause between two queries of the loaded controllers, in seconds.
+        :param timeout_sec: How long to wait overall, in seconds.
+        :param polling_sec: Pause between two queries of the loaded controllers, in seconds.
 
-        Returns:
-            True if the controller data is available, False on timeout.
+        :returns: True if the controller data is available, False on timeout.
         """
         deadline = time.monotonic() + timeout_sec
 
@@ -363,12 +350,10 @@ class DuaticControllerHelper:
         """
         Waits for the future until the deadline. Only spins the node if it is not already spun by an executor.
 
-        Args:
-            future: The future to wait for.
-            deadline: Point in time to wait until, as time.monotonic() value.
+        :param future: The future to wait for.
+        :param deadline: Point in time to wait until, as time.monotonic() value.
 
-        Returns:
-            True if the future completed.
+        :returns: True if the future completed.
         """
         if not getattr(self.node.executor, "is_spinning", False):
             # Nobody spins the node (e.g. during construction), so spin it here
@@ -407,8 +392,7 @@ class DuaticControllerHelper:
         Rebuilds the whitelisted controllers by base name, the list of active controllers and
         the state of the freeze controller.
 
-        Args:
-            response: Response of the list_controllers service.
+        :param response: Response of the list_controllers service.
         """
         # Get current controllers from response
         current_controllers = {ctrl.name: ctrl.state for ctrl in response.controller}

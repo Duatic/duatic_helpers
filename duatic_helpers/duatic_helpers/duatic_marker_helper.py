@@ -42,9 +42,8 @@ class DuaticMarkerHelper:
         """
         Construct the helper and its marker publisher.
 
-        Args:
-            node: Node used to create the publisher.
-            namespace_prefix: Stored as an attribute, currently not used for the markers.
+        :param node: Node used to create the publisher.
+        :param namespace_prefix: Stored as an attribute, currently not used for the markers.
         """
         self.node = node
         self.marker_publisher = self.node.create_publisher(MarkerArray, "/marker_visu", 100)
@@ -58,10 +57,9 @@ class DuaticMarkerHelper:
 
         The axes are drawn 0.1 m long, with x in red, y in green and z in blue.
 
-        Args:
-            pose_stamped: Pose to visualize. Its stamp is used for the markers.
-            frame: Frame the pose is expressed in, set as the frame of the markers.
-            ns_prefix: Prefix for the marker namespaces.
+        :param pose_stamped: Pose to visualize. Its stamp is used for the markers.
+        :param frame: Frame the pose is expressed in, set as the frame of the markers.
+        :param ns_prefix: Prefix for the marker namespaces.
         """
         marker_array = MarkerArray()
 
