@@ -28,11 +28,10 @@ import time
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
-import rclpy
-
 from sensor_msgs.msg import JointState
 from controller_manager_msgs.srv import ListHardwareComponents
 from duatic_helpers.duatic_param_helper import DuaticParamHelper
+from duatic_helpers.duatic_spin_helper import spin_once, spin_until_future_complete
 
 if TYPE_CHECKING:
     from typing import Any
@@ -364,7 +363,7 @@ class DuaticRobotsHelper:
         while time.monotonic() < deadline:
             if self._expected_joints and self._robot_count > 0 and not self._missing_joints():
                 return True
-            rclpy.spin_once(self.node, timeout_sec=0.1)
+            spin_once(self.node, timeout_sec=0.1)
 
         if self._robot_count <= 0:
             self.node.get_logger().error(
@@ -483,7 +482,7 @@ class DuaticRobotsHelper:
         future = self.hardware_components_client.call_async(request)
 
         # Wait for response
-        rclpy.spin_until_future_complete(self.node, future, timeout_sec=2.0)
+        spin_until_future_complete(self.node, future, timeout_sec=2.0)
 
         if future.result() is None:
             self.node.get_logger().debug("Hardware components service call failed")

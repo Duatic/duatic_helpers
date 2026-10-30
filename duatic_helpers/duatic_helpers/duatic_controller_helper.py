@@ -26,9 +26,9 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-import rclpy
 from rclpy.parameter_client import AsyncParameterClient
 from controller_manager_msgs.srv import ListControllers, SwitchController
+from duatic_helpers.duatic_spin_helper import spin_until_future_complete
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -358,7 +358,7 @@ class DuaticControllerHelper:
         if not getattr(self.node.executor, "is_spinning", False):
             # Nobody spins the node (e.g. during construction), so spin it here
             remaining_sec = max(deadline - time.monotonic(), 0.0)
-            rclpy.spin_until_future_complete(self.node, future, timeout_sec=remaining_sec)
+            spin_until_future_complete(self.node, future, timeout_sec=remaining_sec)
         else:
             # The node is already spun by its executor, which will complete the future
             while not future.done() and time.monotonic() < deadline:
