@@ -200,11 +200,13 @@ def wait_for_controller_states(
     :param controller_manager: Fully qualified name of the controller manager node.
     :param timeout: How long to wait before failing, in seconds.
 
-    :raises AssertionError: If any controller is not in its expected state within the timeout. The
-        message names each mismatching controller with its actual state.
+    :raises AssertionError: If the list_controllers service never responds, or if any controller is
+        not in its expected state within the timeout. The message names each mismatching controller
+        with its actual state.
     """
-    client = node.create_client(ListControllers, f"{controller_manager}/list_controllers")
-    actual_states: dict[str, str] = {}
+    service_name = f"{controller_manager}/list_controllers"
+    client = node.create_client(ListControllers, service_name)
+    actual_states: dict[str, str] | None = None
 
     start = time.time()
     while time.time() - start < timeout:
@@ -218,6 +220,7 @@ def wait_for_controller_states(
         time.sleep(0.1)
 
     node.destroy_client(client)
+    assert actual_states is not None, f"No response from {service_name} within {timeout} s"
     mismatches = {
         name: state for name, state in expected_states.items() if actual_states.get(name) != state
     }

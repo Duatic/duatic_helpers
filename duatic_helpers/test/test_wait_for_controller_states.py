@@ -87,3 +87,11 @@ class TestWaitForControllerStates(unittest.TestCase):
                 self.node, {"gripper": "active"}, controller_manager="/test_cm", timeout=1.0
             )
         self.assertIn("gripper is not listed (expected active)", str(ctx.exception))
+
+    def test_unreachable_controller_manager_is_reported(self) -> None:
+        with self.assertRaises(AssertionError) as ctx:
+            wait_for_controller_states(
+                self.node, STATES, controller_manager="/missing_cm", timeout=1.0
+            )
+        self.assertIn("No response from /missing_cm/list_controllers", str(ctx.exception))
+        self.assertNotIn("not listed", str(ctx.exception))
