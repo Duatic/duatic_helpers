@@ -9,7 +9,6 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>osrf_pycommon</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>python3-types-pyyaml</exec_depend>
