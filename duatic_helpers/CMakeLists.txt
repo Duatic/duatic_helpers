@@ -29,6 +29,8 @@ if(BUILD_TESTING)
   )
   duatic_add_pytest_test(test_launch_config_as_bool test/test_launch_config_as_bool.py
   )
+  duatic_add_pytest_test(test_wait_for_controller_states test/test_wait_for_controller_states.py
+  )
 endif()
 
 ament_package(
