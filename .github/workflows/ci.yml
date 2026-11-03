@@ -19,7 +19,6 @@ on:
 jobs:
   ci:
     # Canary for Duatic/duatic_ros2_base_images#13: ci-workflows v2 (Duatic/ci-workflows#48)
-    # builds and tests on the factory's ci image, which it pushes to GHCR.
     permissions:
       contents: write
       packages: write
