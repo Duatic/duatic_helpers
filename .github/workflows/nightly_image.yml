@@ -1,8 +1,6 @@
 name: Nightly image
 
-# Canary for Duatic/duatic_ros2_base_images#13. A push to test/factory that changes this file
-# builds and publishes ghcr.io/duatic/helpers/jazzy-{dev,runtime}: workflow_dispatch only works
-# for workflows on the default branch, and no robot or developer pulls the helpers images.
+# Canary for Duatic/duatic_ros2_base_images#13.
 on:
   push:
     branches: [test/factory]
