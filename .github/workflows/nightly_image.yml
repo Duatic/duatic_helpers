@@ -1,6 +1,7 @@
 name: Nightly image
 
-# Canary for Duatic/duatic_ros2_base_images#13. A push changing this file runs it.
+# Canary for Duatic/duatic_ros2_base_images#13 (factory 1.0.2: GH_PAT optional).
+# A push changing this file runs it.
 on:
   push:
     branches: [test/factory]
