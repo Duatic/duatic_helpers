@@ -1,6 +1,6 @@
 name: Nightly image
 
-# Canary for Duatic/duatic_ros2_base_images#13.
+# Canary for Duatic/duatic_ros2_base_images#13. A push changing this file runs it.
 on:
   push:
     branches: [test/factory]
