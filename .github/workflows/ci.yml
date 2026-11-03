@@ -18,9 +18,12 @@ on:
 
 jobs:
   ci:
+    # Canary for Duatic/duatic_ros2_base_images#13: ci-workflows v2 (Duatic/ci-workflows#48)
+    # builds and tests on the factory's ci image, which it pushes to GHCR.
     permissions:
       contents: write
-    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v1
+      packages: write
+    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@feat/factory-ci
     with:
       ros_distro: ${{ inputs.ros_distro }}
       badge_branch: true

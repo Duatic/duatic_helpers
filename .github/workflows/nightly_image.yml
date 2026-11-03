@@ -1,0 +1,29 @@
+name: Nightly image
+
+# Canary for Duatic/duatic_ros2_base_images#13. A push to test/factory that changes this file
+# builds and publishes ghcr.io/duatic/helpers/jazzy-{dev,runtime}: workflow_dispatch only works
+# for workflows on the default branch, and no robot or developer pulls the helpers images.
+on:
+  push:
+    branches: [test/factory]
+    paths: [.github/workflows/nightly_image.yml]
+  workflow_dispatch:
+    inputs:
+      ros_distro:
+        description: "Comma-separated distros to build, e.g. 'jazzy,kilted'. Empty builds the factory's default set."
+        default: ""
+      publish:
+        description: "Push the images to ghcr.io"
+        type: boolean
+        default: false
+
+jobs:
+  image:
+    permissions:
+      contents: write
+      packages: write
+    uses: Duatic/duatic_ros2_base_images/.github/workflows/nightly.yml@v1
+    with:
+      ros_distro: ${{ github.event_name == 'push' && 'jazzy' || inputs.ros_distro }}
+      publish: ${{ github.event_name == 'push' || inputs.publish }}
+    secrets: inherit
