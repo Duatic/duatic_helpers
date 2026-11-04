@@ -33,3 +33,5 @@ Images in this repository are to be licensed separately if you want to use them 
 ## Contributing
 
 Please see the [Contributing guide](./CONTRIBUTING.md)
+
+<!-- Canary: a docs-only change, which skips CI's build and test legs. -->
