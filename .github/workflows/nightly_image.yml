@@ -1,6 +1,6 @@
 name: Nightly image
 
-# Canary for Duatic/duatic_ros2_base_images#13 (factory 1.0.2: GH_PAT optional).
+# Canary for Duatic/duatic_ros2_base_images#29 (multi-arch, pinned to its branch until release).
 # A push changing this file runs it.
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: Duatic/duatic_ros2_base_images/.github/workflows/nightly.yml@v1
+    uses: Duatic/duatic_ros2_base_images/.github/workflows/nightly.yml@feat/multi-arch-images
     with:
       ros_distro: ${{ github.event_name == 'push' && 'jazzy' || inputs.ros_distro }}
       publish: ${{ github.event_name == 'push' || inputs.publish }}

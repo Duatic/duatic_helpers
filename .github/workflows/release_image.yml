@@ -1,9 +1,10 @@
 name: Release image
 
-# Canary for Duatic/duatic_ros2_base_images#13. A push to test/factory that changes this file
-# releases ghcr.io/duatic/helpers/jazzy-runtime:0.0.1-test, moves its :stable, and creates the
-# release/jazzy/0.0.1-test tag and GitHub Release. Delete all three afterwards; a second run with
-# the same version fails, since release tags are immutable.
+# Canary for Duatic/duatic_ros2_base_images#29 (multi-arch, pinned to its branch until release).
+# A push to test/factory that changes this file releases ghcr.io/duatic/helpers:jazzy-0.0.2-test
+# and helpers-dev:jazzy-0.0.2-test for amd64 and arm64, moves their :jazzy, and creates the
+# release/jazzy/0.0.2-test tag and GitHub Release. Delete them afterwards; a second run with the
+# same version fails, since release tags are immutable.
 on:
   push:
     branches: [test/factory]
@@ -24,8 +25,8 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: Duatic/duatic_ros2_base_images/.github/workflows/release-image.yml@v1
+    uses: Duatic/duatic_ros2_base_images/.github/workflows/release-image.yml@feat/multi-arch-images
     with:
       ros_distro: ${{ github.event_name == 'push' && 'jazzy' || inputs.ros_distro }}
-      version: ${{ github.event_name == 'push' && '0.0.1-test' || inputs.version }}
+      version: ${{ github.event_name == 'push' && '0.0.2-test' || inputs.version }}
     secrets: inherit
