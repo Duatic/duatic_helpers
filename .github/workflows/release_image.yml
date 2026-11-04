@@ -27,6 +27,6 @@ jobs:
       packages: write
     uses: Duatic/duatic_ros2_base_images/.github/workflows/release-image.yml@feat/multi-arch-images
     with:
-      ros_distro: ${{ github.event_name == 'push' && 'jazzy' || inputs.ros_distro }}
-      version: ${{ github.event_name == 'push' && '0.0.2-test' || inputs.version }}
+      ros_distro: ${{ github.event_name == 'push' && 'lyrical' || inputs.ros_distro }}
+      version: ${{ github.event_name == 'push' && '0.0.3-test' || inputs.version }}
     secrets: inherit
