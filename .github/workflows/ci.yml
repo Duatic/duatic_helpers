@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v2
+    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@feat/fused-ci-leg
     with:
       ros_distro: ${{ inputs.ros_distro }}
       badge_branch: true

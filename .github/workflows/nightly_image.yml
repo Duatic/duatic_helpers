@@ -1,6 +1,9 @@
 name: Nightly image
 
 on:
+  push:
+    branches: [test/fused-ci]
+    paths: [.github/workflows/nightly_image.yml]
   schedule:
     - cron: '0 2 * * *'
       timezone: "Europe/Zurich"
@@ -19,8 +22,8 @@ jobs:
     permissions:
       contents: write   # image-badges branch
       packages: write
-    uses: Duatic/duatic_ros2_base_images/.github/workflows/reusable_nightly_image.yml@v1
+    uses: Duatic/duatic_ros2_docker_images/.github/workflows/reusable_nightly_image.yml@feat/build-image-action
     with:
-      ros_distro: ${{ inputs.ros_distro }}
-      publish: ${{ github.event_name == 'schedule' || inputs.publish }}
+      ros_distro: ${{ github.event_name == 'push' && 'jazzy' || inputs.ros_distro }}
+      publish: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
     secrets: inherit
