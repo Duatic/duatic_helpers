@@ -1,9 +1,5 @@
 name: Release image
 
-# Releases ghcr.io/duatic/helpers:<distro>-<version> and helpers-dev:<distro>-<version> for amd64
-# and arm64 through the image factory (Duatic/duatic_ros2_base_images), moves their :<distro>,
-# and creates the release/<distro>/<version> tag and GitHub Release. Release tags are
-# immutable: a version that already exists is refused.
 on:
   workflow_dispatch:
     inputs:

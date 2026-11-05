@@ -1,9 +1,5 @@
 name: Nightly image
 
-# Builds the dev and runtime images of every distro through the image factory
-# (Duatic/duatic_ros2_base_images) for amd64 and arm64. The scheduled run publishes them as
-# ghcr.io/duatic/helpers:<distro>-nightly and helpers-dev:<distro>, an hour after CI so it builds
-# on the day's ci images.
 on:
   schedule:
     - cron: '0 2 * * *'
