@@ -124,6 +124,8 @@ class BrakeReleaseNode(Node):
             self.feedback_publisher.publish(
                 JoyFeedback(type=JoyFeedback.TYPE_RUMBLE, id=0, intensity=1.0)
             )
+        elif self.release_running and self._is_freeze_active():
+            self.abort_brake_release()
 
     def _is_freeze_active(self):
         """True if any freeze controller is currently active (from the poll cache)."""
@@ -197,6 +199,33 @@ class BrakeReleaseNode(Node):
         self.get_logger().info("Brake release combo pressed - activating brake release controller.")
         future = self.switch_controller_client.call_async(request)
         future.add_done_callback(self._handle_activation_response)
+
+    def abort_brake_release(self):
+        """Deactivate the running brake release controller, so a cleared freeze does not resume it."""
+        self.release_running = False
+        if not self.switch_controller_client.service_is_ready():
+            self.get_logger().error(
+                "Controller Manager service not available to abort brake release."
+            )
+            return
+
+        request = SwitchController.Request()
+        request.deactivate_controllers = [self.brake_release_controller]
+        request.strictness = SwitchController.Request.BEST_EFFORT
+
+        self.get_logger().warn("Freeze controller active - aborting brake release.")
+        future = self.switch_controller_client.call_async(request)
+        future.add_done_callback(self._handle_abort_response)
+
+    def _handle_abort_response(self, future):
+        """Log an abort the controller manager did not carry out."""
+        try:
+            response = future.result()
+        except Exception as e:
+            self.get_logger().error(f"Brake release abort service call failed: {e}")
+            return
+        if not response.ok:
+            self.get_logger().error("Brake release abort rejected by controller-manager.")
 
     def _handle_activation_response(self, future):
         """Start watching for the end of the release once the controller manager confirms it."""

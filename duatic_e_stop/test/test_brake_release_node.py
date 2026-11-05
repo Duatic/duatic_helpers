@@ -116,6 +116,15 @@ def activations(cm):
     return [r for r in cm.switch_requests if BRAKE_CONTROLLER in r.activate_controllers]
 
 
+def deactivations(cm):
+    return [
+        r
+        for r in cm.switch_requests
+        if BRAKE_CONTROLLER in r.deactivate_controllers
+        and BRAKE_CONTROLLER not in r.activate_controllers
+    ]
+
+
 def rumbles(node):
     return node.feedback_publisher.messages
 
@@ -188,6 +197,17 @@ def test_restarting_a_running_release_does_not_rumble(node, cm):
     node.watch_release()
 
     assert len(activations(cm)) == 2
+    assert rumbles(node) == []
+
+
+def test_a_freeze_aborts_a_running_release_without_rumble(node, cm):
+    hold(node, DEADMAN, BRAKE)
+    cm.set("freeze_controller_arm", "active")
+    node.watch_release()
+    node.watch_release()
+
+    assert len(deactivations(cm)) == 1
+    assert cm.states[BRAKE_CONTROLLER]["state"] == "inactive"
     assert rumbles(node) == []
 
 
