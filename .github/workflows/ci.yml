@@ -18,11 +18,10 @@ on:
 
 jobs:
   ci:
-    # Canary for Duatic/duatic_ros2_base_images#13: ci-workflows v2 (Duatic/ci-workflows#48)
     permissions:
       contents: write
-      packages: write
-    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@feat/factory-ci
+      packages: write   # the day's ci images, which the nightly builds on
+    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v2
     with:
       ros_distro: ${{ inputs.ros_distro }}
       badge_branch: true

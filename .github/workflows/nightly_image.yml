@@ -1,11 +1,13 @@
 name: Nightly image
 
-# Canary for Duatic/duatic_ros2_base_images#29 (multi-arch, pinned to its branch until release).
-# A push changing this file runs it, for every distro.
+# Builds the dev and runtime images of every distro through the image factory
+# (Duatic/duatic_ros2_base_images) for amd64 and arm64. The scheduled run publishes them as
+# ghcr.io/duatic/helpers:<distro>-nightly and helpers-dev:<distro>, an hour after CI so it builds
+# on the day's ci images.
 on:
-  push:
-    branches: [test/factory]
-    paths: [.github/workflows/nightly_image.yml]
+  schedule:
+    - cron: '0 2 * * *'
+      timezone: "Europe/Zurich"
   workflow_dispatch:
     inputs:
       ros_distro:
@@ -19,10 +21,10 @@ on:
 jobs:
   image:
     permissions:
-      contents: write
+      contents: write   # image-badges branch
       packages: write
-    uses: Duatic/duatic_ros2_base_images/.github/workflows/reusable_nightly_image.yml@feat/multi-arch-images
+    uses: Duatic/duatic_ros2_base_images/.github/workflows/reusable_nightly_image.yml@v1
     with:
       ros_distro: ${{ inputs.ros_distro }}
-      publish: ${{ github.event_name == 'push' || inputs.publish }}
+      publish: ${{ github.event_name == 'schedule' || inputs.publish }}
     secrets: inherit
