@@ -1,4 +1,4 @@
-"""Tests for the brake release gesture.
+"""Tests for the brake release gesture and its completion feedback.
 
 The controller manager is replaced by an in-process fake that answers list_controllers and
 switch_controller immediately, so update() can be driven tick by tick without spinning.
@@ -10,7 +10,7 @@ import pytest
 import rclpy
 from controller_manager_msgs.msg import ControllerState
 from controller_manager_msgs.srv import ListControllers, SwitchController
-from rclpy.duration import Duration
+from sensor_msgs.msg import JoyFeedback
 from rclpy.task import Future
 
 from duatic_e_stop.brake_release_node import BrakeReleaseNode
@@ -26,6 +26,7 @@ class FakeControllerManager:
     def __init__(self):
         self.states = {}
         self.switch_requests = []
+        self.accept_switches = True
 
     def set(self, name, state, claimed_interfaces=()):
         self.states[name] = {"state": state, "claimed_interfaces": list(claimed_interfaces)}
@@ -44,11 +45,21 @@ class FakeControllerManager:
 
     def switch_controller(self, request):
         self.switch_requests.append(request)
+        if not self.accept_switches:
+            return SwitchController.Response(ok=False)
         for name in request.deactivate_controllers:
             self.states[name]["state"] = "inactive"
         for name in request.activate_controllers:
             self.states[name]["state"] = "active"
         return SwitchController.Response(ok=True)
+
+
+class FakePublisher:
+    def __init__(self):
+        self.messages = []
+
+    def publish(self, msg):
+        self.messages.append(msg)
 
 
 class FakeClient:
@@ -87,7 +98,7 @@ def node(cm):
     brake_node = BrakeReleaseNode()
     brake_node.list_controllers_client = FakeClient(cm.list_controllers)
     brake_node.switch_controller_client = FakeClient(cm.switch_controller)
-    brake_node.poll_controller_states()
+    brake_node.feedback_publisher = FakePublisher()
     yield brake_node
     brake_node.destroy_node()
 
@@ -98,7 +109,6 @@ def hold(node, *buttons):
     for button in buttons:
         pressed[button] = 1
     node.latest_buttons = pressed
-    node.last_joy_time = node.get_clock().now()
     node.update()
 
 
@@ -106,13 +116,8 @@ def activations(cm):
     return [r for r in cm.switch_requests if BRAKE_CONTROLLER in r.activate_controllers]
 
 
-def deactivations(cm):
-    return [
-        r
-        for r in cm.switch_requests
-        if BRAKE_CONTROLLER in r.deactivate_controllers
-        and BRAKE_CONTROLLER not in r.activate_controllers
-    ]
+def rumbles(node):
+    return node.feedback_publisher.messages
 
 
 def test_holding_the_combo_activates_once(node, cm):
@@ -138,37 +143,36 @@ def test_button_order_does_not_matter(node, cm):
     assert len(activations(cm)) == 1
 
 
-def test_releasing_after_a_status_poll_deactivates(node, cm):
+def test_letting_go_keeps_the_controller_running(node, cm):
     hold(node, DEADMAN, BRAKE)
-    node.poll_controller_states()
-    hold(node, DEADMAN)
+    hold(node)
+    node.watch_release()
 
-    assert len(deactivations(cm)) == 1
-    assert cm.states[BRAKE_CONTROLLER]["state"] == "inactive"
+    assert len(cm.switch_requests) == 1
+    assert cm.states[BRAKE_CONTROLLER]["state"] == "active"
+    assert rumbles(node) == []
 
 
-def test_releasing_before_the_next_status_poll_deactivates(node, cm):
+def test_the_gamepad_rumbles_once_the_controller_deactivates_itself(node, cm):
     hold(node, DEADMAN, BRAKE)
-    hold(node, DEADMAN)
+    cm.set(BRAKE_CONTROLLER, "inactive")
+    node.watch_release()
+    node.watch_release()
 
-    assert len(deactivations(cm)) == 1
-    assert cm.states[BRAKE_CONTROLLER]["state"] == "inactive"
+    assert len(rumbles(node)) == 1
+    assert rumbles(node)[0].type == JoyFeedback.TYPE_RUMBLE
 
 
-def test_a_silent_gamepad_counts_as_released(node, cm):
+def test_a_rejected_activation_does_not_rumble(node, cm):
+    cm.accept_switches = False
     hold(node, DEADMAN, BRAKE)
-    node.poll_controller_states()
+    node.watch_release()
 
-    node.last_joy_time = node.get_clock().now() - Duration(seconds=1.0)
-    node.update()
-
-    assert len(deactivations(cm)) == 1
-    assert cm.states[BRAKE_CONTROLLER]["state"] == "inactive"
+    assert rumbles(node) == []
 
 
 def test_pressing_again_while_active_retriggers_the_controller(node, cm):
     cm.set(BRAKE_CONTROLLER, "active")
-    node.poll_controller_states()
 
     hold(node, DEADMAN, BRAKE)
 
@@ -177,16 +181,17 @@ def test_pressing_again_while_active_retriggers_the_controller(node, cm):
     assert list(request.activate_controllers) == [BRAKE_CONTROLLER]
 
 
-def test_an_active_freeze_blocks_the_release(node, cm):
-    cm.set("freeze_controller_arm", "active")
-    node.poll_controller_states()
-
+def test_restarting_a_running_release_does_not_rumble(node, cm):
     hold(node, DEADMAN, BRAKE)
+    hold(node)
+    hold(node, DEADMAN, BRAKE)
+    node.watch_release()
 
-    assert activations(cm) == []
+    assert len(activations(cm)) == 2
+    assert rumbles(node) == []
 
 
-def test_a_freeze_since_the_last_status_poll_blocks_the_release(node, cm):
+def test_an_active_freeze_blocks_the_release(node, cm):
     cm.set("freeze_controller_arm", "active")
 
     hold(node, DEADMAN, BRAKE)
@@ -196,7 +201,6 @@ def test_a_freeze_since_the_last_status_poll_blocks_the_release(node, cm):
 
 def test_an_unloaded_brake_controller_is_not_switched(node, cm):
     del cm.states[BRAKE_CONTROLLER]
-    node.poll_controller_states()
 
     hold(node, DEADMAN, BRAKE)
 
@@ -205,7 +209,6 @@ def test_an_unloaded_brake_controller_is_not_switched(node, cm):
 
 def test_a_motion_controller_holding_position_blocks_the_release(node, cm):
     cm.set("joint_trajectory_controller", "active", ["arm/joint1/position"])
-    node.poll_controller_states()
 
     hold(node, DEADMAN, BRAKE)
 
@@ -214,7 +217,6 @@ def test_a_motion_controller_holding_position_blocks_the_release(node, cm):
 
 def test_a_controller_without_position_interfaces_does_not_block(node, cm):
     cm.set("joint_state_broadcaster", "active", ["arm/joint1/effort"])
-    node.poll_controller_states()
 
     hold(node, DEADMAN, BRAKE)
 
