@@ -88,6 +88,17 @@ class TestWaitForControllerStates(unittest.TestCase):
             )
         self.assertIn("gripper is not listed (expected active)", str(ctx.exception))
 
+    def test_unexpected_controller_is_reported(self) -> None:
+        with self.assertRaises(AssertionError) as ctx:
+            wait_for_controller_states(
+                self.node,
+                {"joint_state_broadcaster": "active"},
+                controller_manager="/test_cm",
+                timeout=1.0,
+            )
+        self.assertIn("freeze_controller is inactive (expected not listed)", str(ctx.exception))
+        self.assertNotIn("joint_state_broadcaster", str(ctx.exception))
+
     def test_unreachable_controller_manager_is_reported(self) -> None:
         with self.assertRaises(AssertionError) as ctx:
             wait_for_controller_states(
