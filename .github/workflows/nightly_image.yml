@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-    uses: Duatic/duatic_ros2_base_images/.github/workflows/nightly.yml@feat/multi-arch-images
+    uses: Duatic/duatic_ros2_base_images/.github/workflows/reusable_nightly_image.yml@feat/multi-arch-images
     with:
       ros_distro: ${{ inputs.ros_distro }}
       publish: ${{ github.event_name == 'push' || inputs.publish }}
