@@ -5,7 +5,7 @@
   <version>1.4.0</version>
   <description>Common support functionality used throughout duatic stack</description>
   <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
-  <license>BSD 3-Clause</license>
+  <license>BSD-3-Clause</license>
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
@@ -23,5 +23,6 @@
 
   <export>
     <build_type>ament_python</build_type>
+    <duatic_archive_root>public</duatic_archive_root>
   </export>
 </package>
