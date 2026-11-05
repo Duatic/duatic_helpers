@@ -20,7 +20,8 @@ jobs:
   ci:
     permissions:
       contents: write
-    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v1
+      packages: write
+    uses: Duatic/ci-workflows/.github/workflows/ci_orchestrator.yml@v2
     with:
       ros_distro: ${{ inputs.ros_distro }}
       badge_branch: true
