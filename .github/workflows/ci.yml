@@ -11,10 +11,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
-  schedule:
-    # Run every morning at 01:00 to detect flakiness and broken dependencies
-    - cron: '0 1 * * *'
-      timezone: "Europe/Zurich"
 
 jobs:
   ci:
