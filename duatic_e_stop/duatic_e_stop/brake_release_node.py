@@ -92,7 +92,7 @@ class BrakeReleaseNode(Node):
         if not self.release_running:
             return
         if not self.list_controllers_client.service_is_ready():
-            self.get_logger().warn(
+            self.get_logger().warning(
                 "Controller Manager not available for status update.", throttle_duration_sec=10.0
             )
             return
@@ -103,7 +103,7 @@ class BrakeReleaseNode(Node):
         try:
             self._store_controller_states(future.result())
         except Exception as e:
-            self.get_logger().warn(f"Failed to update controller states: {e}")
+            self.get_logger().warning(f"Failed to update controller states: {e}")
 
     def _store_controller_states(self, result):
         """Cache the controller states and report a release the controller has finished."""
@@ -163,19 +163,19 @@ class BrakeReleaseNode(Node):
 
         # Guard 1: never release the brake while frozen (E-Stop must be cleared first).
         if self._is_freeze_active():
-            self.get_logger().warn("Brake release ignored: freeze controller is active.")
+            self.get_logger().warning("Brake release ignored: freeze controller is active.")
             return
 
         # Guard 2: the brake controller must actually be loaded.
         if self.brake_release_controller not in self.controller_states:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"Brake release ignored: '{self.brake_release_controller}' is not loaded."
             )
             return
 
         # Guard 3: do nothing while a motion controller already holds the joints (normal operation).
         if self._is_blocking_controller_active():
-            self.get_logger().warn("Brake release ignored: a motion controller is active.")
+            self.get_logger().warning("Brake release ignored: a motion controller is active.")
             return
 
         self.activate_brake_release()
@@ -213,7 +213,7 @@ class BrakeReleaseNode(Node):
         request.deactivate_controllers = [self.brake_release_controller]
         request.strictness = SwitchController.Request.BEST_EFFORT
 
-        self.get_logger().warn("Freeze controller active - aborting brake release.")
+        self.get_logger().warning("Freeze controller active - aborting brake release.")
         future = self.switch_controller_client.call_async(request)
         future.add_done_callback(self._handle_abort_response)
 
@@ -235,7 +235,7 @@ class BrakeReleaseNode(Node):
             self.get_logger().error(f"Brake release activation service call failed: {e}")
             return
         if not response.ok:
-            self.get_logger().warn("Brake release activation rejected by controller-manager.")
+            self.get_logger().warning("Brake release activation rejected by controller-manager.")
             return
         self.release_running = True
 

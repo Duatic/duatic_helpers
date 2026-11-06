@@ -110,7 +110,7 @@ class DuaticPinocchioHelper:
                 target_frame_id = self.model.getFrameId(target_frame)
                 target_pose = self.data.oMf[target_frame_id]
             except Exception as e:
-                self.node.get_logger().warn(f"Could not get tbase frame: {e}")
+                self.node.get_logger().warning(f"Could not get tbase frame: {e}")
 
         # Transform to target frame if specified
         if target_frame is not None:
@@ -122,7 +122,9 @@ class DuaticPinocchioHelper:
                 ee_pose = target_pose.inverse() * pose
                 return ee_pose
             except Exception as e:
-                self.node.get_logger().warn(f"Could not transform to frame '{target_frame}': {e}")
+                self.node.get_logger().warning(
+                    f"Could not transform to frame '{target_frame}': {e}"
+                )
                 # Fall back to model root frame
 
         return pose
@@ -290,7 +292,9 @@ class DuaticPinocchioHelper:
             urdf_file_path = self._write_urdf_to_temp_file(urdf_xml)
         else:
             # Fallback to hardcoded path if parameter server fails
-            self.node.get_logger().warn("URDF not found on parameter server, using fallback URDF")
+            self.node.get_logger().warning(
+                "URDF not found on parameter server, using fallback URDF"
+            )
             urdf_file_path = self.get_dynaarm_urdf()
 
         # Load model with Pinocchio and clean it up
@@ -370,7 +374,7 @@ class DuaticPinocchioHelper:
                 joint_index = all_joint_names.index(joint_name)
                 joint_values.append(q[joint_index])
             except ValueError:
-                self.node.get_logger().warn(f"Joint '{joint_name}' not found in model")
+                self.node.get_logger().warning(f"Joint '{joint_name}' not found in model")
                 joint_values.append(0.0)  # Default value for missing joints
 
         return joint_values

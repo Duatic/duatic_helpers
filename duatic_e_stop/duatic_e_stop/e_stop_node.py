@@ -86,7 +86,7 @@ class EmergencyStopNode(Node):
         # Gamepad disconnects, but allow a grace period before assuming disconnection
         if self.gamepad_connected and (now - self.last_joy_received_time) > Duration(seconds=1.0):
             if (now - self.last_toggle_time).nanoseconds / 10**9 >= 2:
-                self.get_logger().warn("Gamepad disconnected! Activating freeze_controller.")
+                self.get_logger().warning("Gamepad disconnected! Activating freeze_controller.")
                 self.set_freeze_controller(True)
                 self.gamepad_connected = False
 
@@ -116,7 +116,7 @@ class EmergencyStopNode(Node):
     def update_freeze_controllers_status(self):
         """Periodically updates the freeze controller names and states (non-blocking for control loop)."""
         if not self.list_controllers_client.wait_for_service(timeout_sec=0.5):
-            self.get_logger().warn("Controller Manager service not available for status update.")
+            self.get_logger().warning("Controller Manager service not available for status update.")
             return
 
         request = ListControllers.Request()
@@ -134,7 +134,7 @@ class EmergencyStopNode(Node):
             self.freeze_controller_states = status
             self.get_logger().debug(f"Freeze controllers and states (periodic): {status}")
         except Exception as e:
-            self.get_logger().warn(f"Failed to update freeze controller states: {e}")
+            self.get_logger().warning(f"Failed to update freeze controller states: {e}")
 
     def get_freeze_controllers_status(self):
         """Returns the cached freeze controller states."""
@@ -151,7 +151,7 @@ class EmergencyStopNode(Node):
         # Use all known freeze controller names from the latest status
         controller_names = list(self.freeze_controller_states.keys())
         if not controller_names:
-            self.get_logger().warn("No freeze_controller found to (de)activate.")
+            self.get_logger().warning("No freeze_controller found to (de)activate.")
             return
 
         request = SwitchController.Request()
@@ -177,7 +177,9 @@ class EmergencyStopNode(Node):
                     f"Freeze Controllers {'Activated' if activate else 'Deactivated'}: {controller_names}"
                 )
             else:
-                self.get_logger().warn("Freeze Controller switch failed. Checking actual state...")
+                self.get_logger().warning(
+                    "Freeze Controller switch failed. Checking actual state..."
+                )
 
             # Always check and print the actual state of all freeze controllers
             status = self.get_freeze_controllers_status()

@@ -250,7 +250,7 @@ class BatteryMonitorNode(Node):
     def _start_mock(self, count: int, battery_ids: list):
         """Set up simulated batteries instead of touching BLE at all."""
         if battery_ids:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"mock_battery_count is {count}, so the {len(battery_ids)} configured "
                 "battery_ids are ignored and no battery is connected to."
             )
@@ -355,9 +355,9 @@ class BatteryMonitorNode(Node):
             future.result(timeout=timeout)
         except concurrent.futures.TimeoutError:
             future.cancel()
-            self.get_logger().warn(f"{what} timed out after {timeout:.0f}s and was cancelled")
+            self.get_logger().warning(f"{what} timed out after {timeout:.0f}s and was cancelled")
         except Exception as e:
-            self.get_logger().warn(f"{what} failed: {e}")
+            self.get_logger().warning(f"{what} failed: {e}")
 
     async def _resolve_addresses(self):
         """Look up each configured battery's BLE address.
@@ -388,7 +388,7 @@ class BatteryMonitorNode(Node):
     async def _poll_all(self):
         """Poll each battery in turn, one BLE connection at a time."""
         if self._ble_lock.locked():
-            self.get_logger().warn("A BLE cycle is still running, skipping this poll")
+            self.get_logger().warning("A BLE cycle is still running, skipping this poll")
             return
 
         async with self._ble_lock:
@@ -438,7 +438,7 @@ class BatteryMonitorNode(Node):
     def _report_failure(self, device: _BatteryDevice, message: str):
         """Log a failed poll once per outage, including the very first attempt."""
         if device.last_poll_ok is not False:
-            self.get_logger().warn(message)
+            self.get_logger().warning(message)
         device.last_poll_ok = False
 
     def _build_msg(self, device: _BatteryDevice, parsed: dict) -> BatteryState:

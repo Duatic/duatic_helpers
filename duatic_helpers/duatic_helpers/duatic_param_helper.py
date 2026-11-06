@@ -147,5 +147,5 @@ class DuaticParamHelper:
             return None
 
         except Exception as e:
-            self.node.get_logger().warn(f"Failed to get URDF from {node_name}: {e}")
+            self.node.get_logger().warning(f"Failed to get URDF from {node_name}: {e}")
             return None

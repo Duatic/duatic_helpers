@@ -2,10 +2,10 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>duatic_helpers</name>
-  <version>1.4.0</version>
+  <version>2.0.0</version>
   <description>Common support functionality used throughout duatic stack</description>
   <maintainer email="mbloechlinger@duatic.com">Marc Blöchlinger</maintainer>
-  <license>BSD 3-Clause</license>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
@@ -31,5 +31,6 @@
 
   <export>
     <build_type>ament_cmake</build_type>
+    <duatic_archive_root>public</duatic_archive_root>
   </export>
 </package>
