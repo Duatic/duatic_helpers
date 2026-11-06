@@ -496,7 +496,7 @@ class EStopErrorLoggerNode(Node):
         """Copy the raw stdout/stderr logs of the current ROS 2 launch session."""
         base_log_dir = Path(os.environ.get("ROS_LOG_DIR", os.path.expanduser("~/.ros/log")))
         if not base_log_dir.exists():
-            self.get_logger().warn(f"ROS log directory not found at {base_log_dir}. Skipping.")
+            self.get_logger().warning(f"ROS log directory not found at {base_log_dir}. Skipping.")
             return
 
         latest_link = base_log_dir / "latest"
@@ -505,7 +505,7 @@ class EStopErrorLoggerNode(Node):
         else:
             session_dirs = [d for d in base_log_dir.iterdir() if d.is_dir() and not d.is_symlink()]
             if not session_dirs:
-                self.get_logger().warn(f"No log session found in {base_log_dir}. Skipping.")
+                self.get_logger().warning(f"No log session found in {base_log_dir}. Skipping.")
                 return
             session_dir = max(session_dirs, key=os.path.getmtime)
 

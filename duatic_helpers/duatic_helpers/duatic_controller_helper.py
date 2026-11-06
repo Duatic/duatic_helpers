@@ -368,7 +368,7 @@ class DuaticControllerHelper:
     def _get_all_controllers(self) -> None:
         """Asynchronously fetches all controllers and their states, and updates the snapshot."""
         if not self.controller_client.wait_for_service(timeout_sec=2.0):
-            self.node.get_logger().warn(
+            self.node.get_logger().warning(
                 "Controller manager service not available.", throttle_duration_sec=10.0
             )
             return
