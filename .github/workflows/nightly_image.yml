@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       ros_distro:
-        description: "Comma-separated distros to build, e.g. 'jazzy,kilted'. Empty builds the factory's default set."
+        description: "Distro to test and build, e.g. 'jazzy'. Empty runs every distro."
         default: ""
       publish:
         description: "Push the images to ghcr.io"
@@ -17,9 +17,9 @@ on:
 jobs:
   image:
     permissions:
-      contents: write   # image-badges branch
+      contents: write   # badges and image-badges branches
       packages: write
-    uses: Duatic/duatic_ros2_docker_images/.github/workflows/reusable_nightly_image.yml@v1
+    uses: Duatic/ci-workflows/.github/workflows/reusable_nightly_orchestrator.yml@v2
     with:
       ros_distro: ${{ inputs.ros_distro }}
       publish: ${{ github.event_name == 'schedule' || inputs.publish }}
