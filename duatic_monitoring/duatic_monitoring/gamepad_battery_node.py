@@ -48,7 +48,7 @@ class GamepadBatteryNode(Node):
         path = self._find_gamepad_battery()
         if path is None:
             if self._last_path is not None:
-                self.get_logger().warn("Gamepad battery no longer detected")
+                self.get_logger().warning("Gamepad battery no longer detected")
                 self._last_path = None
             return
 
@@ -60,7 +60,7 @@ class GamepadBatteryNode(Node):
             capacity = int((path / "capacity").read_text().strip())
             status_text = (path / "status").read_text().strip()
         except (FileNotFoundError, ValueError) as e:
-            self.get_logger().warn(f"Failed to read battery: {e}")
+            self.get_logger().warning(f"Failed to read battery: {e}")
             return
 
         msg = BatteryState()
