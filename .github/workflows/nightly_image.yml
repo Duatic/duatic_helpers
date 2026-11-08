@@ -2,7 +2,7 @@ name: Nightly image
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '30 0 * * *'
       timezone: "Europe/Zurich"
   workflow_dispatch:
     inputs:
