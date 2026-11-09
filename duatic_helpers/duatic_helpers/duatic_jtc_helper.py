@@ -26,10 +26,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-import rclpy
 from rclpy.clock import Clock, ClockType
 from rclpy.duration import Duration
 from duatic_helpers.duatic_param_helper import DuaticParamHelper
+from duatic_helpers.duatic_spin_helper import spin_once
 
 if TYPE_CHECKING:
     from typing import Any
@@ -214,7 +214,7 @@ class DuaticJTCHelper:
                 f"Found {len(found_topics)} topics, expecting {len(component_names)}. Retrying...",
                 throttle_duration_sec=10,
             )
-            rclpy.spin_once(self.node, timeout_sec=0.5)
+            spin_once(self.node, timeout_sec=0.5)
 
         if len(found_topics) < len(component_names):
             self.node.get_logger().error(

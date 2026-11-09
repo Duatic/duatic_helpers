@@ -25,8 +25,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import rclpy
 from rclpy.parameter_client import AsyncParameterClient
+from duatic_helpers.duatic_spin_helper import spin_once
 
 if TYPE_CHECKING:
     from rcl_interfaces.msg import ParameterValue
@@ -76,7 +76,7 @@ class DuaticParamHelper:
         # Add a hard timeout to the spin loop to avoid infinite hangs
         start_time = self.node.get_clock().now()
         while not future.done():
-            rclpy.spin_once(self.node, timeout_sec=0.05)
+            spin_once(self.node, timeout_sec=0.05)
 
             # 5 second safety timeout for the future itself
             if (self.node.get_clock().now() - start_time).nanoseconds > 5e9:
