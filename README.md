@@ -13,6 +13,7 @@ This repository is structured as a monorepo and contains the following packages:
 * **`duatic_helpers`**: General ROS 2 support functionality, including launch and testing utilities.
 * **`duatic_kinematics`**: High-performance, ROS-agnostic robotics mathematics and kinematics solvers (e.g., JAX-optimized Inverse Kinematics using PyRoki).
 * **`duatic_monitoring`**: Hardware monitoring nodes for battery state publishing (gamepad, LiTime BMS, aggregator).
+* **`duatic_rviz_highlight`**: RViz plugin that recolors the links of the robot model, driven by highlight plugins (e.g. `duatic_rviz_highlight_joint_limits`).
 
 ## Installation & Dependencies
 
