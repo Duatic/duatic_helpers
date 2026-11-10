@@ -1,0 +1,9 @@
+<library path="duatic_rviz_highlight">
+  <class name="duatic_rviz_highlight/HighlightedRobotModel"
+         type="duatic::rviz_highlight::HighlightedRobotModelDisplay"
+         base_class_type="rviz_common::Display">
+    <description>
+      The RobotModel display, with highlights that recolor its links (e.g. links close to a joint limit).
+    </description>
+  </class>
+</library>

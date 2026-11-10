@@ -1,0 +1,7 @@
+# Parameters of the RViz node that select the highlights
+highlighted_robot_model_display:
+  highlight:
+    enabled:
+      type: string_array
+      default_value: []
+      description: "Highlights to show; a higher-priority or later one wins over an earlier one. Use [''] for none ([] disallowed for ROS2)."
