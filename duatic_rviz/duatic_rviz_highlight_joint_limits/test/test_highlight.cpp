@@ -181,3 +181,18 @@ TEST_F(HighlightTest, ColorsTheLinkOfAJointByItsLatestPosition)
   EXPECT_TRUE(showsEventually(0.195, palette::kRed));    // 0.3 degrees from the upper limit
   EXPECT_TRUE(showsEventually(0.1, std::nullopt));       // back in the middle: the color goes away again
 }
+
+TEST_F(HighlightTest, ModeAllUsesTheMoreSevereOfBothMargins)
+{
+  // Absolute: 0.1 degrees (no warning). Relative: warning within 0.2 of the range, i.e. 2.3 degrees
+  node->declare_parameter<std::string>(std::string(kPrefix) + "mode", "all");
+  node->declare_parameter<double>(std::string(kPrefix) + "margin.absolute_deg.warning", 0.1);
+  node->declare_parameter<double>(std::string(kPrefix) + "margin.absolute_deg.critical", 0.05);
+  node->declare_parameter<double>(std::string(kPrefix) + "margin.relative.warning", 0.2);
+  node->declare_parameter<double>(std::string(kPrefix) + "margin.relative.critical", 0.01);
+  highlight.initialize(node, kPrefix);
+  highlight.onRobotDescription(kSmallRangeUrdf);
+
+  EXPECT_TRUE(showsEventually(0.18, palette::kOrange));  // only the relative margin triggers
+  EXPECT_TRUE(showsEventually(0.1, std::nullopt));       // neither triggers
+}

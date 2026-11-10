@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -42,7 +43,8 @@ protected:
   }
 
 private:
-  Margins margins() const;
+  /** @brief The margins to check: one per mode in use (both for the mode `all`). */
+  std::vector<Margins> margins() const;
 
   /** @brief Warn about margins that do not make sense for the parameters and monitored joints. */
   void validateMargins() const;

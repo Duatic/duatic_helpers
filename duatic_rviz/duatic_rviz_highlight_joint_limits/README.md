@@ -12,10 +12,10 @@ file), all under `highlight.joint_limits.`:
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `mode` | `absolute_deg` | `absolute_deg`: margins in degrees. `relative`: margins as a fraction of the joint's range. |
+| `mode` | `absolute_deg` | `absolute_deg`: margins in degrees. `relative`: margins as a fraction of the joint's range. `all`: both, the more severe one counts. |
 | `margin.absolute_deg.warning`, `margin.absolute_deg.critical` | 15, 2.5 | margins in degrees, in the mode `absolute_deg` |
 | `margin.relative.warning`, `margin.relative.critical` | 0.06, 0.01 | margins as a fraction of the range (0 to 0.5), in the mode `relative` |
 
 For example, `{"joint_limits": {"mode": "relative", "margin": {"relative": {"warning": 0.15}}}}` colors a joint orange
-when less than 15 % (0.15) of its range is left. Only the margins of the selected mode are used. Values are validated: an unknown mode or a
+when less than 15 % (0.15) of its range is left. Only the margins of the selected mode(s) are used. Values are validated: an unknown mode or a
 negative margin is rejected when the parameter is set. The parameters can be changed while RViz runs.

@@ -7,9 +7,9 @@ joint_limits_highlight:
   mode:
     type: string
     default_value: "absolute_deg"
-    description: "'absolute_deg' measures the distance to a limit in degrees, 'relative' as a fraction of the range of the joint."
+    description: "'absolute_deg' measures the distance to a limit in degrees, 'relative' as a fraction of the range of the joint, 'all' makes the more severe one count."
     validation:
-      one_of<>: [["absolute_deg", "relative"]]
+      one_of<>: [["absolute_deg", "relative", "all"]]
   margin:
     absolute_deg:
       warning:
