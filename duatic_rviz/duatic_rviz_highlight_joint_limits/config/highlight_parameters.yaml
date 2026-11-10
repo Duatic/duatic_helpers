@@ -1,0 +1,39 @@
+# Parameters of the joint_limits highlight. The name below is the C++ namespace of the generated code.
+joint_limits_highlight:
+  priority:
+    type: int
+    default_value: 0
+    description: "Priority of the highlight (low)."
+  mode:
+    type: string
+    default_value: "absolute_deg"
+    description: "'absolute_deg' measures the distance to a limit in degrees, 'relative' as a fraction of the range of the joint."
+    validation:
+      one_of<>: [["absolute_deg", "relative"]]
+  margin:
+    absolute_deg:
+      warning:
+        type: double
+        default_value: 15.0
+        description: "Distance to a limit in degrees below which the severity is a warning, in the mode 'absolute_deg'."
+        validation:
+          gt_eq<>: [0.0]
+      critical:
+        type: double
+        default_value: 2.5
+        description: "Distance to a limit in degrees below which the severity is critical, in the mode 'absolute_deg'."
+        validation:
+          gt_eq<>: [0.0]
+    relative:
+      warning:
+        type: double
+        default_value: 0.06
+        description: "Distance to a limit as a fraction of the range (0 to 0.5) below which the severity is a warning, in the mode 'relative'. At most 0.5, as a joint is never farther than half of its range from a limit."
+        validation:
+          bounds<>: [0.0, 0.5]
+      critical:
+        type: double
+        default_value: 0.01
+        description: "Distance to a limit as a fraction of the range (0 to 0.5) below which the severity is critical, in the mode 'relative'. At most 0.5, as a joint is never farther than half of its range from a limit."
+        validation:
+          bounds<>: [0.0, 0.5]
