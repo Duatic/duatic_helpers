@@ -278,6 +278,7 @@ def _solve_ik_multi(
     limit_margin: float = 0.15,
     limit_margin_weight: float = 5.0,
     ori_weight: float = 10.0,
+    avoid_self_collision: jdc.Static[bool] = True,
 ) -> jax.Array:
     """Solve whole-body IK for multiple targets simultaneously (bimanual pattern).
 
@@ -314,13 +315,6 @@ def _solve_ik_multi(
             robot,
             JointVar(0),
         ),
-        pk.costs.self_collision_cost(
-            robot,
-            robot_coll,
-            JointVar(0),
-            margin=self_collision_margin,
-            weight=self_collision_weight,
-        ),
         _limit_margin_cost(
             robot,
             JointVar(0),
@@ -336,6 +330,16 @@ def _solve_ik_multi(
             soft_weights,
         ),
     ]
+    if avoid_self_collision:
+        costs.append(
+            pk.costs.self_collision_cost(
+                robot,
+                robot_coll,
+                JointVar(0),
+                margin=self_collision_margin,
+                weight=self_collision_weight,
+            )
+        )
 
     sol = (
         jaxls.LeastSquaresProblem(costs=costs, variables=[JointVar(0)])
@@ -672,6 +676,7 @@ class PyrokiIKSolver:
         ori_err_thresh=None,
         max_joint_step=None,
         ori_weight=10.0,
+        avoid_self_collision=True,
     ):
         """
         Solve IK for several targets in ONE problem, so they may share joints.
@@ -686,6 +691,8 @@ class PyrokiIKSolver:
             target_wxyzs: (N, 4) target quaternions (wxyz)
             ori_weight: orientation against position in the pose cost. The default keeps
                 the whole-body behaviour teleop has today; solve() uses 100.
+            avoid_self_collision: False leaves the self-collision cost out, as solve()
+                does, which makes a solve about ten times faster.
 
         Returns:
             (cfg, [(pos_err, ori_err), ...]) — solution and per-target errors
@@ -729,6 +736,7 @@ class PyrokiIKSolver:
                 self_collision_weight=self.self_collision_weight,
                 self_collision_margin=self.self_collision_margin,
                 ori_weight=ori_weight,
+                avoid_self_collision=avoid_self_collision,
             )
             # Safety net: enforce locked joints stay exactly at prev_cfg
             cfg_out = np.array(jnp.where(mask_arr > 0.5, jnp.array(cfg), prev_cfg))
