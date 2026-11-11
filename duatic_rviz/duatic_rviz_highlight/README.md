@@ -18,8 +18,7 @@ In the RViz config, use the display instead of `rviz_default_plugins/RobotModel`
   Name: RobotModel
 ```
 
-The highlights are chosen by the string array parameter `highlight.enabled` of the RViz node (none by
-default), e.g. in a launch file:
+The highlights are chosen by the string array parameter `highlight.enabled` of the RViz node (none by default), e.g. in a launch file:
 
 ```python
 Node(
@@ -39,13 +38,31 @@ Node(
 )
 ```
 
-All of them are in the section `highlight` of the parameters of the RViz node: `highlight.enabled` selects the
-highlights, and the parameters of a highlight are named `highlight.<highlight name>.<parameter>` (so a highlight
-cannot be called `enabled`). On the command line, a list is written in yaml syntax:
+A highlight is named `<package>/<Class>`, e.g. `duatic_rviz_highlight_joint_limits/JointLimits`, and the name must match
+exactly. For an unknown name, an error is logged and nothing is loaded.
+
+To change loaded highlights at runtime, use e.g.:
+```bash
+ros2 param set /<namespace>/rviz2 highlight.enabled "[duatic_rviz_highlight_joint_limits/JointLimits]" # or "['']" to unload all
+```
+
+The parameters of a highlight are named `highlight.<highlight name>.<parameter>`, with `/` replaced by `__`
+(e.g. `highlight.duatic_rviz_highlight_joint_limits__JointLimits.mode`). On the command line, a list is written in yaml syntax:
 
 ```bash
-ros2 run rviz2 rviz2 -d config.rviz --ros-args -p highlight.enabled:="[joint_limits, self_collision]"
+ros2 run rviz2 rviz2 -d config.rviz --ros-args -p highlight.enabled:="[duatic_rviz_highlight_joint_limits/JointLimits]"
 ```
+
+To see which highlights exist (and which are loaded, with their priority), call the service of the RViz node, like
+`list_controllers` of the controller manager:
+
+```bash
+ros2 service call /<namespace>/rviz2/list_highlights duatic_rviz_highlight_msgs/srv/ListHighlights
+```
+
+It lists the loaded highlights first, by ascending `rank`: the order they are applied in, so the last one wins on a link.
+Equal priorities are ranked by their position in `highlight.enabled`. The highlights that are not loaded follow with
+`rank: -1`.
 
 A parameter cannot be an empty list: RViz does not start with `-p highlight.enabled:="[]"`. Use `[""]`
 (a list with an empty name) for no highlights, empty names are ignored.
@@ -86,12 +103,11 @@ DUATIC_RVIZ_HIGHLIGHT_EXPORT_CLASS(MyHighlight)
 ```
 
 In `update`, set a color per link, e.g. `colors["link"] = duatic::rviz_highlight::palette::kRed`, or your own with
-`Color::rgb(255, 140, 0)` (`common/color.hpp`). List the plugin in a plugin description file (the `name` is what is given as
-the highlight name):
+`Color::rgb(255, 140, 0)` (`common/color.hpp`). List the plugin in a plugin description file (the `name` must be `<package>/<Class>`):
 
 ```xml
 <library path="my_package">
-  <class name="my_highlight" type="MyHighlight" base_class_type="duatic::rviz_highlight::HighlightPlugin"/>
+  <class name="my_package/MyHighlight" type="MyHighlight" base_class_type="duatic::rviz_highlight::HighlightPlugin"/>
 </library>
 ```
 

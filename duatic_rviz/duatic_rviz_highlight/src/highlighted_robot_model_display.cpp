@@ -7,7 +7,10 @@
 
 #include <algorithm>
 #include <exception>
+#include <set>
 
+#include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string/trim_all.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/ros_integration/ros_node_abstraction_iface.hpp>
@@ -32,6 +35,46 @@ void HighlightedRobotModelDisplay::onInitialize()
   param_listener_ = std::make_unique<highlighted_robot_model_display::ParamListener>(node_);
   loader_ = std::make_unique<pluginlib::ClassLoader<HighlightPluginBase>>("duatic_rviz_highlight",
                                                                           "duatic::rviz_highlight::HighlightPlugin");
+
+  // Collect declared highlights for listing service
+  for (const auto& name : loader_->getDeclaredClasses()) {
+    duatic_rviz_highlight_msgs::msg::HighlightInfo info;
+    info.name = name;
+    info.description = boost::algorithm::trim_fill_copy(loader_->getClassDescription(name), " ");
+    info.rank = -1;
+    declared_highlights_.push_back(info);
+  }
+
+  // Services
+  list_service_ = node_->create_service<duatic_rviz_highlight_msgs::srv::ListHighlights>(
+      "~/list_highlights",
+      [this](const duatic_rviz_highlight_msgs::srv::ListHighlights::Request::SharedPtr request,
+             duatic_rviz_highlight_msgs::srv::ListHighlights::Response::SharedPtr response) {
+        listHighlights(request, response);
+      });
+}
+
+void HighlightedRobotModelDisplay::listHighlights(
+    const duatic_rviz_highlight_msgs::srv::ListHighlights::Request::SharedPtr /*request*/,
+    duatic_rviz_highlight_msgs::srv::ListHighlights::Response::SharedPtr response) const
+{
+  // The loaded highlights, in the order they are applied in (ascending rank)
+  std::set<std::string> loaded;
+  for (const auto& [name, highlight] : highlights_) {
+    auto info = *std::find_if(declared_highlights_.begin(), declared_highlights_.end(),
+                              [&name](const auto& declared) { return declared.name == name; });
+    info.priority = highlight->priority();
+    info.rank = static_cast<int32_t>(loaded.size());
+    response->highlights.push_back(info);
+    loaded.insert(name);
+  }
+
+  // At the end, the highlights that are not loaded
+  for (const auto& info : declared_highlights_) {
+    if (!loaded.contains(info.name)) {
+      response->highlights.push_back(info);
+    }
+  }
 }
 
 void HighlightedRobotModelDisplay::load_urdf_from_string(const std::string& robot_description)
@@ -153,7 +196,8 @@ bool HighlightedRobotModelDisplay::highlightsChanged()
     try {
       // Create a new highlight safely
       auto highlight = loader_->createSharedInstance(name);
-      highlight->initialize(node_, "highlight." + name + ".");
+      // Parameters are named after the given name, with "/" replaced by "__", as "/" is not allowed in parameter names
+      highlight->initialize(node_, "highlight." + boost::algorithm::replace_all_copy(name, "/", "__") + ".");
       if (!urdf_xml_.empty()) {
         highlight->onRobotDescription(urdf_xml_);
       }

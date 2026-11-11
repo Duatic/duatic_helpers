@@ -1,0 +1,5 @@
+# List the highlights that are available to the display, and which of them are enabled.
+# Like `ros2 service call /controller_manager/list_controllers`.
+# The response lists the loaded highlights first, by ascending rank (the last one wins), then the others.
+---
+HighlightInfo[] highlights

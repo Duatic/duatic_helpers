@@ -11,7 +11,9 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <depend>duatic_rviz_highlight_msgs</depend>
   <depend>generate_parameter_library</depend>
+  <depend>libboost-dev</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rviz_common</depend>

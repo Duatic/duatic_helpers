@@ -16,6 +16,7 @@
 
 #include "duatic_rviz_highlight/plugin/highlight_plugin_base.hpp"
 #include "duatic_rviz_highlight/highlighted_robot_model_display_parameters.hpp"
+#include <duatic_rviz_highlight_msgs/srv/list_highlights.hpp>
 
 namespace duatic::rviz_highlight
 {
@@ -52,6 +53,9 @@ private:
    * @param names The names of the highlights to unload.
    */
   void unloadHighlights(const std::vector<std::string>& names);
+  /** @brief Service callback: list the available highlights and which of them are loaded. */
+  void listHighlights(const duatic_rviz_highlight_msgs::srv::ListHighlights::Request::SharedPtr request,
+                      duatic_rviz_highlight_msgs::srv::ListHighlights::Response::SharedPtr response) const;
   /**
    * @brief Recreate the highlights if `highlight.enabled` changed.
    * @return True if the highlights were recreated, false otherwise.
@@ -76,6 +80,11 @@ private:
   std::vector<std::pair<std::string, std::shared_ptr<HighlightPluginBase>>> highlights_;
   // The names of the active highlights, in the order of `highlight.enabled` (without empty names and duplicates).
   std::vector<std::string> created_selection_;
+
+  // Name and description of every declared highlight
+  std::vector<duatic_rviz_highlight_msgs::msg::HighlightInfo> declared_highlights_;
+  // Lists the highlights, as `~/list_highlights` of the RViz node
+  rclcpp::Service<duatic_rviz_highlight_msgs::srv::ListHighlights>::SharedPtr list_service_;
 
   // The robot description last given to the highlights, empty if none.
   std::string urdf_xml_;

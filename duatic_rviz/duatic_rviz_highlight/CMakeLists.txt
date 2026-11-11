@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22)
 project(duatic_rviz_highlight)
 
 find_package(ament_cmake REQUIRED)
+find_package(Boost REQUIRED)
+find_package(duatic_rviz_highlight_msgs REQUIRED)
 find_package(generate_parameter_library REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -24,12 +26,14 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 target_link_libraries(${PROJECT_NAME} PUBLIC
+  ${duatic_rviz_highlight_msgs_TARGETS}
   highlighted_robot_model_display_parameters
   pluginlib::pluginlib
   rclcpp::rclcpp
   rviz_common::rviz_common
   rviz_default_plugins::rviz_default_plugins
 )
+target_link_libraries(${PROJECT_NAME} PRIVATE Boost::boost)
 
 # The RobotModel display with highlights, loaded by RViz
 pluginlib_export_plugin_description_file(rviz_common plugins_description.xml)
@@ -44,5 +48,5 @@ install(
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(generate_parameter_library pluginlib rclcpp rviz_common rviz_default_plugins)
+ament_export_dependencies(duatic_rviz_highlight_msgs generate_parameter_library pluginlib rclcpp rviz_common rviz_default_plugins)
 ament_package()
