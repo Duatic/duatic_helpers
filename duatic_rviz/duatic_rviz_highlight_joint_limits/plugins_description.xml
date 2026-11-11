@@ -1,5 +1,5 @@
 <library path="duatic_rviz_highlight_joint_limits">
-  <class name="joint_limits"
+  <class name="duatic_rviz_highlight_joint_limits/JointLimits"
          type="duatic::rviz_highlight::JointLimitsHighlight"
          base_class_type="duatic::rviz_highlight::HighlightPlugin">
     <description>
