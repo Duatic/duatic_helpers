@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
+import subprocess
 import sys
 import unittest
 from collections.abc import Sequence
@@ -102,6 +104,29 @@ class TestURDF(_DescriptionTestCase):
                 f"Mesh file not found: {path} (referenced in {self.urdf_file})",
             )
 
+    def test_urdfdom_parses(self):
+        """
+        Checks that urdfdom's `check_urdf` accepts the URDF: valid tree (single root link, no
+        cycles), joints referencing existing links, unique link/joint names, complete limits.
+
+        Run as a subprocess on purpose: urdfdom is the C++ reference parser used by
+        robot_state_publisher and most ROS tools, and it has no Python binding. The pure Python
+        urdf_parser_py (and srdfdom) is a separate reimplementation that behaves differently
+        (e.g. it accepts a revolute joint without <limit>) and prints a warning for each custom
+        tag we use, so it would not tell us what the ROS tools will do with the URDF.
+        """
+        check_urdf = shutil.which("check_urdf")
+        if check_urdf is None:
+            self.fail("check_urdf not found (part of the 'urdfdom' package)")
+
+        # check_urdf also reads from stdin, so no temporary file is needed
+        result = subprocess.run(
+            [check_urdf, "/dev/stdin"], input=self.dom.toxml(), capture_output=True, text=True
+        )
+        self.assertEqual(
+            result.returncode, 0, f"check_urdf failed for {self.urdf_file}:\n{result.stderr}"
+        )
+
     def test_inertials(self):
         """Checks that every link has at most one <inertial> and a non-negative mass"""
         for link in self.dom.getElementsByTagName("link"):
@@ -120,7 +145,12 @@ class TestURDF(_DescriptionTestCase):
                 # but parsing the matrix elements is more involved.
 
     def test_joint_limits(self):
-        """Checks that revolute/prismatic joints have complete, sane limits"""
+        """
+        Checks that revolute/prismatic joints have complete, sane limits
+
+        Note: test_urdfdom_parses currently also covers a missing <limit> tag and a missing
+        effort/velocity. The assertions are kept so this test does not depend on check_urdf.
+        """
         for joint in self.dom.getElementsByTagName("joint"):
             # Fixed, continuous, floating and planar joints don't strictly need limits
             if joint.getAttribute("type") not in ["revolute", "prismatic"]:

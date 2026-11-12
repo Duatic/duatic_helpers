@@ -16,6 +16,7 @@
   <depend>python3-yaml</depend>
   <depend>python3-types-pyyaml</depend>
   <depend>sensor_msgs</depend>
+  <depend>urdfdom</depend>
   <depend>xacro</depend>
 
   <build_depend>ament_cmake_python</build_depend>
