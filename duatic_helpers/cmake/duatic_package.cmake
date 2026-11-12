@@ -88,6 +88,42 @@ function(duatic_add_pytest_test target)
   endif()
 endfunction()
 
+function(_duatic_add_description_test testname)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  set(result_file "${AMENT_TEST_RESULTS_DIR}/${PROJECT_NAME}/${testname}.xunit.xml")
+  duatic_add_test(${testname}
+    COMMAND "${Python3_EXECUTABLE}" -u -m duatic_helpers.test_descriptions --package ${PROJECT_NAME} ${ARGN}
+      "--junit-xml=${result_file}" "--junit-prefix=${PROJECT_NAME}"
+    OUTPUT_FILE "${CMAKE_BINARY_DIR}/ament_cmake_pytest/${testname}.txt"
+    RESULT_FILE "${result_file}"
+    TIMEOUT 60
+  )
+  set_tests_properties(${testname} PROPERTIES LABELS "pytest")
+endfunction()
+
+# Test URDF files (one test per file)
+function(duatic_add_urdf_tests)
+  if(NOT ARGN)
+    message(FATAL_ERROR "duatic_add_urdf_tests: no URDF files given")
+  endif()
+  foreach(urdf IN LISTS ARGN)
+    # Add one test per file, to be more granular
+    get_filename_component(urdf_stem ${urdf} NAME_WE)
+    _duatic_add_description_test(urdf_${PROJECT_NAME}_${urdf_stem} --files ${urdf})
+  endforeach()
+endfunction()
+
+# Test an SRDF file (against a URDF file)
+function(duatic_add_srdf_test srdf urdf)
+  if(NOT srdf OR NOT urdf OR ARGN)
+    message(FATAL_ERROR "duatic_add_srdf_test: expected exactly 2 arguments (srdf urdf), "
+      "got: '${srdf}' '${urdf}' ${ARGN}")
+  endif()
+  get_filename_component(srdf_stem ${srdf} NAME_WE)
+  get_filename_component(urdf_stem ${urdf} NAME_WE)
+  _duatic_add_description_test(srdf_${PROJECT_NAME}_${srdf_stem}_${urdf_stem} --files ${srdf} ${urdf})
+endfunction()
+
 function(duatic_add_gmock target)
   if(COMMAND ament_add_ros_isolated_gmock AND USE_ISOLATED_TESTS)
     ament_add_ros_isolated_gmock(${target} ${ARGN})
