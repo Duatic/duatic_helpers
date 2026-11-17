@@ -7,6 +7,7 @@ from duatic_monitoring.failure_snapshot_trigger_node import (
     LOCK_FILE,
     FreezeDetector,
     has_state_changed,
+    is_new_event,
     prune_sessions,
     prune_snapshots,
 )
@@ -93,27 +94,39 @@ def test_disarmed_topic_freezes_again_only_after_moving():
     assert detector.is_frozen(27 * SEC)
 
 
+def test_first_stopped_topic_is_a_new_event():
+    assert is_new_event([3 * SEC], last_trigger_ns=None)
+
+
+def test_topic_that_stopped_before_the_last_trigger_joins_its_event():
+    assert not is_new_event([4 * SEC], last_trigger_ns=9 * SEC)
+
+
+def test_topic_that_moved_after_the_last_trigger_is_a_new_event():
+    assert is_new_event([4 * SEC, 10 * SEC], last_trigger_ns=9 * SEC)
+
+
 def test_prune_removes_sessions_without_an_event(tmp_path):
-    current = session(tmp_path, "2026-01-03_00-00-00", with_event=False)
-    empty = session(tmp_path, "2026-01-01_00-00-00", with_event=False)
-    kept = session(tmp_path, "2026-01-02_00-00-00")
+    current = session(tmp_path, "2026-01-03_00-00-00-000000", with_event=False)
+    empty = session(tmp_path, "2026-01-01_00-00-00-000000", with_event=False)
+    kept = session(tmp_path, "2026-01-02_00-00-00-000000")
 
     assert prune_sessions(tmp_path, current, max_sessions=10) == [empty]
     assert kept.exists() and current.exists() and not empty.exists()
 
 
 def test_prune_keeps_the_newest_sessions_counting_the_current_one(tmp_path):
-    oldest = session(tmp_path, "2026-01-01_00-00-00")
-    middle = session(tmp_path, "2026-01-02_00-00-00")
-    newest = session(tmp_path, "2026-01-03_00-00-00")
-    current = session(tmp_path, "2026-01-04_00-00-00", with_event=False)
+    oldest = session(tmp_path, "2026-01-01_00-00-00-000000")
+    middle = session(tmp_path, "2026-01-02_00-00-00-000000")
+    newest = session(tmp_path, "2026-01-03_00-00-00-000000")
+    current = session(tmp_path, "2026-01-04_00-00-00-000000", with_event=False)
 
     assert prune_sessions(tmp_path, current, max_sessions=3) == [oldest]
     assert middle.exists() and newest.exists() and current.exists()
 
 
 def test_prune_leaves_other_directories_alone(tmp_path):
-    current = session(tmp_path, "2026-01-02_00-00-00", with_event=False)
+    current = session(tmp_path, "2026-01-02_00-00-00-000000", with_event=False)
     unrelated = tmp_path / "maps"
     unrelated.mkdir()
 
@@ -122,8 +135,8 @@ def test_prune_leaves_other_directories_alone(tmp_path):
 
 
 def test_prune_leaves_a_session_another_node_holds(tmp_path):
-    current = session(tmp_path, "2026-01-02_00-00-00", with_event=False)
-    live = session(tmp_path, "2026-01-01_00-00-00", with_event=False)
+    current = session(tmp_path, "2026-01-02_00-00-00-000000", with_event=False)
+    live = session(tmp_path, "2026-01-01_00-00-00-000000", with_event=False)
     with open(live / LOCK_FILE, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         assert prune_sessions(tmp_path, current, max_sessions=10) == []

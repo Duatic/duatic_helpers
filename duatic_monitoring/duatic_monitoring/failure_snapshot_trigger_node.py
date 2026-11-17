@@ -54,8 +54,8 @@ NS_PER_SEC = 1e9
 DISCOVERY_PERIOD_SEC = 2.0
 WATCHDOG_PERIOD_SEC = 0.1
 
-SESSION_NAME_FORMAT = "%Y-%m-%d_%H-%M-%S"
-SESSION_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
+SESSION_NAME_FORMAT = "%Y-%m-%d_%H-%M-%S-%f"
+SESSION_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{6}$")
 EVENTS_FILE = "events.txt"
 LOCK_FILE = ".lock"
 SNAPSHOT_BAG = "snapshot"
@@ -120,8 +120,17 @@ class FreezeDetector:
         self.armed = False
 
 
+def is_new_event(last_changed_ns: list[int], last_trigger_ns: Optional[int]) -> bool:
+    """Report whether newly stopped topics call for a snapshot of their own.
+
+    A topic that stopped moving before the last snapshot was requested is part of what
+    that snapshot recorded. One that moved since then has stopped again.
+    """
+    return last_trigger_ns is None or any(ns > last_trigger_ns for ns in last_changed_ns)
+
+
 def session_is_live(session: Path) -> bool:
-    """Report whether a running trigger node holds the lock of a session directory."""
+    """Report whether a running launch holds the lock of a session directory."""
     try:
         with open(session / LOCK_FILE) as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -137,7 +146,7 @@ def prune_sessions(root: Path, current: Path, max_sessions: int) -> list[Path]:
 
     Sessions that never recorded an event are removed, then the oldest ones until
     max_sessions remain, the current session included. Only directories named like a
-    session are touched, and never one a running trigger node is using.
+    session are touched, and never one a running launch is using.
     """
     others = sorted(
         d
@@ -176,7 +185,6 @@ class FailureSnapshotTriggerNode(Node):
 
         self.declare_parameter("session_dir", "")
         self.declare_parameter("timeout_threshold_sec", 5.0)
-        self.declare_parameter("event_window_sec", 10.0)
         self.declare_parameter("snapshot_service", "/failure_snapshot_recorder/snapshot")
         self.declare_parameter("static_split_service", "/failure_static_recorder/split_bagfile")
         self.declare_parameter("max_sessions", 10)
@@ -187,16 +195,11 @@ class FailureSnapshotTriggerNode(Node):
             raise ValueError("The session_dir parameter is required")
         self._session_dir = Path(session_dir).expanduser()
         self._timeout_ns = int(self.get_parameter("timeout_threshold_sec").value * NS_PER_SEC)
-        self._event_window_ns = int(self.get_parameter("event_window_sec").value * NS_PER_SEC)
         self._max_snapshots = self.get_parameter("max_snapshots_per_session").value
-        # Topics that freeze before this instant belong to the event already recorded.
-        self._event_until_ns = 0
+        self._last_trigger_ns: Optional[int] = None
         self._static_split_requested = False
 
         self._session_dir.mkdir(parents=True, exist_ok=True)
-        # Held for the life of the node, so another launch does not prune this session.
-        self._lock = open(self._session_dir / LOCK_FILE, "w")
-        fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         removed = prune_sessions(
             self._session_dir.parent, self._session_dir, self.get_parameter("max_sessions").value
         )
@@ -265,11 +268,12 @@ class FailureSnapshotTriggerNode(Node):
             self._detectors[topic_name].disarm()
         description = ", ".join(f"{state} on {name}" for name, state in frozen.items())
 
-        if now_ns < self._event_until_ns:
+        last_changed = [self._detectors[name].last_changed_ns for name in frozen]
+        if not is_new_event(last_changed, self._last_trigger_ns):
             self.get_logger().info(f"Part of the same event: {description}")
             self._record_event(description)
             return
-        self._event_until_ns = now_ns + self._event_window_ns
+        self._last_trigger_ns = now_ns
         self._trigger_snapshot(description)
 
     def _record_event(self, description: str) -> None:
