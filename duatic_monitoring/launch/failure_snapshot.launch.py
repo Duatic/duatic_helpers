@@ -26,17 +26,23 @@
 Starts a recorder in snapshot mode that holds the most recent topic data in memory, a
 second recorder for the latched topics the first one does not retain, and the node that
 triggers the snapshot. Each launch writes to its own directory under snapshot_root.
+
+Open the snapshot files one at a time, or run `ros2 bag reindex` on the bag directory
+first: its metadata can be missing, or list snapshots that were removed since.
 """
 
+import fcntl
 import os
 from datetime import datetime
 
+import launch.logging
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
 from duatic_monitoring.failure_snapshot_trigger_node import (
+    LOCK_FILE,
     SESSION_NAME_FORMAT,
     SNAPSHOT_BAG,
     STATIC_BAG,
@@ -49,15 +55,24 @@ EXCLUDED_TYPES = [
 ]
 LATCHED_TOPICS_REGEX = ".*/(tf_static|robot_description)$"
 
+# Held until the launch process exits, so another launch does not prune these sessions.
+_session_locks = []
+
 
 def launch_setup(context):
     root = os.path.expanduser(LaunchConfiguration("snapshot_root").perform(context))
     session_dir = os.path.join(root, datetime.now().strftime(SESSION_NAME_FORMAT))
     try:
-        os.makedirs(session_dir, exist_ok=True)
+        os.makedirs(session_dir)
+        lock = open(os.path.join(session_dir, LOCK_FILE), "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
     except OSError as e:
         # The robot starts without it.
-        return [LogInfo(msg=f"Failure snapshots are off, cannot create {session_dir}: {e}")]
+        launch.logging.get_logger("failure_snapshot").error(
+            f"Failure snapshots are off, cannot create {session_dir}: {e}"
+        )
+        return []
+    _session_locks.append(lock)
 
     # The recorders are not namespaced by launch, so the namespace goes into their names
     # to keep two robots on one domain apart.
