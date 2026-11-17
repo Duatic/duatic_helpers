@@ -199,7 +199,6 @@ class FailureSnapshotTriggerNode(Node):
         self._last_trigger_ns: Optional[int] = None
         self._static_split_requested = False
 
-        self._session_dir.mkdir(parents=True, exist_ok=True)
         removed = prune_sessions(
             self._session_dir.parent, self._session_dir, self.get_parameter("max_sessions").value
         )
@@ -273,8 +272,8 @@ class FailureSnapshotTriggerNode(Node):
             self.get_logger().info(f"Part of the same event: {description}")
             self._record_event(description)
             return
-        self._last_trigger_ns = now_ns
-        self._trigger_snapshot(description)
+        if self._trigger_snapshot(description):
+            self._last_trigger_ns = now_ns
 
     def _record_event(self, description: str) -> None:
         """Append a line to the session's event list."""
@@ -285,8 +284,8 @@ class FailureSnapshotTriggerNode(Node):
         except OSError as e:
             self.get_logger().error(f"Could not record the event in {self._session_dir}: {e}")
 
-    def _trigger_snapshot(self, description: str) -> None:
-        """Record the event and ask the recorder to write its buffer."""
+    def _trigger_snapshot(self, description: str) -> bool:
+        """Record the event and ask the recorder to write its buffer, if it is there."""
         self.get_logger().error(
             f"Drive data stopped, a hardware e-stop or a dead driver: {description}. "
             f"Writing a snapshot to {self._session_dir}"
@@ -297,7 +296,7 @@ class FailureSnapshotTriggerNode(Node):
             self.get_logger().error(
                 f"Snapshot service {self._snapshot_client.srv_name} is not available"
             )
-            return
+            return False
         if not self._static_split_requested:
             if self._static_split_client.service_is_ready():
                 self._static_split_client.call_async(SplitBagfile.Request())
@@ -309,6 +308,7 @@ class FailureSnapshotTriggerNode(Node):
                 )
         future = self._snapshot_client.call_async(Snapshot.Request())
         future.add_done_callback(self._on_snapshot_done)
+        return True
 
     def destroy_node(self):
         self._poll_node.destroy_node()

@@ -55,16 +55,15 @@ EXCLUDED_TYPES = [
 ]
 LATCHED_TOPICS_REGEX = ".*/(tf_static|robot_description)$"
 
-# Held until the launch process exits, so another launch does not prune these sessions.
-_session_locks = []
-
 
 def launch_setup(context):
     root = os.path.expanduser(LaunchConfiguration("snapshot_root").perform(context))
     session_dir = os.path.join(root, datetime.now().strftime(SESSION_NAME_FORMAT))
     try:
         os.makedirs(session_dir)
-        lock = open(os.path.join(session_dir, LOCK_FILE), "w")
+        # A raw descriptor, never closed: the lock lasts until the launch process exits,
+        # so another launch does not prune this session.
+        lock = os.open(os.path.join(session_dir, LOCK_FILE), os.O_CREAT | os.O_WRONLY)
         fcntl.flock(lock, fcntl.LOCK_EX)
     except OSError as e:
         # The robot starts without it.
@@ -72,7 +71,6 @@ def launch_setup(context):
             f"Failure snapshots are off, cannot create {session_dir}: {e}"
         )
         return []
-    _session_locks.append(lock)
 
     # The recorders are not namespaced by launch, so the namespace goes into their names
     # to keep two robots on one domain apart.
