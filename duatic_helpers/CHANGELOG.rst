@@ -2,6 +2,11 @@
 Changelog for package duatic_helpers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.1.0 (2026-11-17)
+------------------
+* feat(test): Add URDF and SRDF test macros  (#77)
+* fix(helpers): wait on a private executor instead of rclpy's global one (#71)
+
 2.0.0 (2026-11-06)
 ------------------
 * fix(startup)!: wait for all controllers to be loaded before querying them (#52)
