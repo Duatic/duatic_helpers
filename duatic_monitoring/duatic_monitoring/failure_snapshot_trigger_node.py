@@ -26,12 +26,14 @@
 When the e-stop cuts motor power the drives keep publishing, but their readings stop
 changing. The node watches every DriveStateCollection topic for that and, on detection,
 asks a rosbag2 recorder running in snapshot mode to write its buffer to disk. It re-arms
-once the readings move again.
+once the readings move again. A topic that stops publishing is treated the same way.
 
 Each launch records into its own session directory. The node also keeps the number of
-session directories bounded.
+session directories, and of snapshots in its own, bounded.
 """
 
+import fcntl
+import math
 import re
 import shutil
 from dataclasses import dataclass
@@ -55,6 +57,14 @@ WATCHDOG_PERIOD_SEC = 0.1
 SESSION_NAME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 SESSION_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$")
 EVENTS_FILE = "events.txt"
+LOCK_FILE = ".lock"
+SNAPSHOT_BAG = "snapshot"
+STATIC_BAG = "static"
+
+
+def _differs(old: float, new: float) -> bool:
+    """Compare two readings, treating a reading that stays NaN as unchanged."""
+    return old != new and not (math.isnan(old) and math.isnan(new))
 
 
 def has_state_changed(old_msg: DriveStateCollection, new_msg: DriveStateCollection) -> bool:
@@ -68,9 +78,9 @@ def has_state_changed(old_msg: DriveStateCollection, new_msg: DriveStateCollecti
 
     for old_state, new_state in zip(old_msg.states, new_msg.states):
         if (
-            old_state.joint_position != new_state.joint_position
-            or old_state.joint_velocity != new_state.joint_velocity
-            or old_state.joint_effort != new_state.joint_effort
+            _differs(old_state.joint_position, new_state.joint_position)
+            or _differs(old_state.joint_velocity, new_state.joint_velocity)
+            or _differs(old_state.joint_effort, new_state.joint_effort)
         ):
             return True
     return False
@@ -83,6 +93,7 @@ class FreezeDetector:
     timeout_ns: int
     last_message: Optional[DriveStateCollection] = None
     last_changed_ns: Optional[int] = None
+    last_sample_ns: Optional[int] = None
     # Only a topic that has proven it streams live data can be considered frozen.
     armed: bool = False
 
@@ -94,14 +105,31 @@ class FreezeDetector:
             self.armed = True
             self.last_changed_ns = now_ns
         self.last_message = msg
+        self.last_sample_ns = now_ns
 
     def is_frozen(self, now_ns: int) -> bool:
         """Report whether live data has stopped changing for longer than the timeout."""
         return self.armed and (now_ns - self.last_changed_ns) > self.timeout_ns
 
+    def is_silent(self, now_ns: int) -> bool:
+        """Report whether the topic has stopped publishing for longer than the timeout."""
+        return (now_ns - self.last_sample_ns) > self.timeout_ns
+
     def disarm(self) -> None:
         """Ignore the topic until its readings move again."""
         self.armed = False
+
+
+def session_is_live(session: Path) -> bool:
+    """Report whether a running trigger node holds the lock of a session directory."""
+    try:
+        with open(session / LOCK_FILE) as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 def prune_sessions(root: Path, current: Path, max_sessions: int) -> list[Path]:
@@ -109,18 +137,34 @@ def prune_sessions(root: Path, current: Path, max_sessions: int) -> list[Path]:
 
     Sessions that never recorded an event are removed, then the oldest ones until
     max_sessions remain, the current session included. Only directories named like a
-    session are touched.
+    session are touched, and never one a running trigger node is using.
     """
     others = sorted(
         d
         for d in root.iterdir()
-        if d.is_dir() and SESSION_NAME_RE.match(d.name) and d.resolve() != current.resolve()
+        if d.is_dir()
+        and SESSION_NAME_RE.match(d.name)
+        and d.resolve() != current.resolve()
+        and not session_is_live(d)
     )
     with_events = [d for d in others if (d / EVENTS_FILE).exists()]
     excess = len(with_events) + 1 - max_sessions
-    removed = [d for d in others if d not in with_events] + with_events[: max(0, excess)]
-    for session in removed:
+    candidates = [d for d in others if d not in with_events] + with_events[: max(0, excess)]
+    for session in candidates:
         shutil.rmtree(session, ignore_errors=True)
+    return [d for d in candidates if not d.exists()]
+
+
+def prune_snapshots(bag_dir: Path, max_snapshots: int) -> list[Path]:
+    """Delete the oldest snapshot files of a bag and return the ones removed.
+
+    The recorder numbers its files and always has one open for the next snapshot, so the
+    newest max_snapshots + 1 are kept.
+    """
+    files = sorted(bag_dir.glob("*.mcap"), key=lambda f: int(f.stem.rsplit("_", 1)[-1]))
+    removed = files[: max(0, len(files) - max_snapshots - 1)]
+    for file in removed:
+        file.unlink(missing_ok=True)
     return removed
 
 
@@ -132,6 +176,7 @@ class FailureSnapshotTriggerNode(Node):
 
         self.declare_parameter("session_dir", "")
         self.declare_parameter("timeout_threshold_sec", 5.0)
+        self.declare_parameter("event_window_sec", 10.0)
         self.declare_parameter("snapshot_service", "/failure_snapshot_recorder/snapshot")
         self.declare_parameter("static_split_service", "/failure_static_recorder/split_bagfile")
         self.declare_parameter("max_sessions", 10)
@@ -142,10 +187,16 @@ class FailureSnapshotTriggerNode(Node):
             raise ValueError("The session_dir parameter is required")
         self._session_dir = Path(session_dir).expanduser()
         self._timeout_ns = int(self.get_parameter("timeout_threshold_sec").value * NS_PER_SEC)
+        self._event_window_ns = int(self.get_parameter("event_window_sec").value * NS_PER_SEC)
         self._max_snapshots = self.get_parameter("max_snapshots_per_session").value
-        self._snapshot_count = 0
+        # Topics that freeze before this instant belong to the event already recorded.
+        self._event_until_ns = 0
+        self._static_split_requested = False
 
         self._session_dir.mkdir(parents=True, exist_ok=True)
+        # Held for the life of the node, so another launch does not prune this session.
+        self._lock = open(self._session_dir / LOCK_FILE, "w")
+        fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         removed = prune_sessions(
             self._session_dir.parent, self._session_dir, self.get_parameter("max_sessions").value
         )
@@ -178,9 +229,14 @@ class FailureSnapshotTriggerNode(Node):
         self._watchdog_timer = self.create_timer(WATCHDOG_PERIOD_SEC, self._watchdog_check)
 
     def _discover_topics(self) -> None:
-        """Subscribe to any DriveStateCollection topic that appeared on the graph."""
+        """Subscribe to any DriveStateCollection topic that appeared in this namespace."""
+        prefix = self.get_namespace().rstrip("/") + "/"
         for topic_name, types in self.get_topic_names_and_types():
-            if topic_name in self._subscriptions_by_topic or DRIVE_STATE_TYPE not in types:
+            if (
+                topic_name in self._subscriptions_by_topic
+                or DRIVE_STATE_TYPE not in types
+                or not topic_name.startswith(prefix)
+            ):
                 continue
             qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
             self._subscriptions_by_topic[topic_name] = self._poll_node.create_subscription(
@@ -190,7 +246,7 @@ class FailureSnapshotTriggerNode(Node):
             self.get_logger().debug(f"Watching {topic_name}")
 
     def _watchdog_check(self) -> None:
-        """Sample the watched topics and trigger a snapshot once one has frozen."""
+        """Sample the watched topics and trigger a snapshot once one has stopped."""
         now_ns = self.get_clock().now().nanoseconds
         for topic_name, subscription in self._subscriptions_by_topic.items():
             with subscription.handle:
@@ -198,43 +254,50 @@ class FailureSnapshotTriggerNode(Node):
             if taken is not None:
                 self._detectors[topic_name].update(taken[0], now_ns)
 
-        frozen_topics = [
-            topic_name
+        frozen = {
+            topic_name: "no data" if detector.is_silent(now_ns) else "data frozen"
             for topic_name, detector in self._detectors.items()
             if detector.is_frozen(now_ns)
-        ]
-        if not frozen_topics:
+        }
+        if not frozen:
             return
-        for topic_name in frozen_topics:
+        for topic_name in frozen:
             self._detectors[topic_name].disarm()
-        self._trigger_snapshot(frozen_topics)
+        description = ", ".join(f"{state} on {name}" for name, state in frozen.items())
 
-    def _trigger_snapshot(self, frozen_topics: list[str]) -> None:
-        """Record the event and ask the recorder to write its buffer."""
-        if self._snapshot_count >= self._max_snapshots:
-            self.get_logger().warning(
-                f"Drive data frozen on {frozen_topics}, but this session already holds "
-                f"{self._max_snapshots} snapshots. Not recording another."
-            )
+        if now_ns < self._event_until_ns:
+            self.get_logger().info(f"Part of the same event: {description}")
+            self._record_event(description)
             return
-        self._snapshot_count += 1
+        self._event_until_ns = now_ns + self._event_window_ns
+        self._trigger_snapshot(description)
 
+    def _record_event(self, description: str) -> None:
+        """Append a line to the session's event list."""
+        stamp = datetime.now().isoformat(timespec="milliseconds")
+        try:
+            with open(self._session_dir / EVENTS_FILE, "a") as events:
+                events.write(f"{stamp} {description}\n")
+        except OSError as e:
+            self.get_logger().error(f"Could not record the event in {self._session_dir}: {e}")
+
+    def _trigger_snapshot(self, description: str) -> None:
+        """Record the event and ask the recorder to write its buffer."""
         self.get_logger().error(
-            f"HARDWARE E-STOP DETECTED (data frozen)! Frozen topics: {frozen_topics}. "
+            f"Drive data stopped, a hardware e-stop or a dead driver: {description}. "
             f"Writing a snapshot to {self._session_dir}"
         )
-        stamp = datetime.now().isoformat(timespec="milliseconds")
-        with open(self._session_dir / EVENTS_FILE, "a") as events:
-            events.write(f"{stamp} data frozen on {', '.join(frozen_topics)}\n")
+        self._record_event(description)
 
         if not self._snapshot_client.service_is_ready():
             self.get_logger().error(
                 f"Snapshot service {self._snapshot_client.srv_name} is not available"
             )
             return
-        if self._snapshot_count == 1:
+        if not self._static_split_requested:
             if self._static_split_client.service_is_ready():
                 self._static_split_client.call_async(SplitBagfile.Request())
+                self._static_split_requested = True
             else:
                 self.get_logger().warning(
                     f"{self._static_split_client.srv_name} is not available. "
@@ -251,8 +314,15 @@ class FailureSnapshotTriggerNode(Node):
         """Report whether the recorder wrote the snapshot."""
         if future.exception() is not None or not future.result().success:
             self.get_logger().error("The recorder failed to write the snapshot")
-        else:
-            self.get_logger().info("Snapshot written")
+            return
+        self.get_logger().info("Snapshot written")
+        try:
+            removed = prune_snapshots(self._session_dir / SNAPSHOT_BAG, self._max_snapshots)
+        except (OSError, ValueError) as e:
+            self.get_logger().error(f"Could not remove old snapshots: {e}")
+            return
+        if removed:
+            self.get_logger().info(f"Removed {len(removed)} old snapshot(s) of this session")
 
 
 def main(args=None):

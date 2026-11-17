@@ -32,11 +32,15 @@ import os
 from datetime import datetime
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, OpaqueFunction
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
-from duatic_monitoring.failure_snapshot_trigger_node import SESSION_NAME_FORMAT
+from duatic_monitoring.failure_snapshot_trigger_node import (
+    SESSION_NAME_FORMAT,
+    SNAPSHOT_BAG,
+    STATIC_BAG,
+)
 
 EXCLUDED_TYPES = [
     "sensor_msgs/msg/Image",
@@ -49,7 +53,18 @@ LATCHED_TOPICS_REGEX = ".*/(tf_static|robot_description)$"
 def launch_setup(context):
     root = os.path.expanduser(LaunchConfiguration("snapshot_root").perform(context))
     session_dir = os.path.join(root, datetime.now().strftime(SESSION_NAME_FORMAT))
-    os.makedirs(session_dir, exist_ok=True)
+    try:
+        os.makedirs(session_dir, exist_ok=True)
+    except OSError as e:
+        # The robot starts without it.
+        return [LogInfo(msg=f"Failure snapshots are off, cannot create {session_dir}: {e}")]
+
+    # The recorders are not namespaced by launch, so the namespace goes into their names
+    # to keep two robots on one domain apart.
+    namespace = context.launch_configurations.get("ros_namespace", "").strip("/")
+    suffix = "_" + namespace.replace("/", "_") if namespace else ""
+    snapshot_recorder = f"failure_snapshot_recorder{suffix}"
+    static_recorder = f"failure_static_recorder{suffix}"
 
     return [
         ExecuteProcess(
@@ -66,9 +81,9 @@ def launch_setup(context):
                 "--storage",
                 "mcap",
                 "--node-name",
-                "failure_snapshot_recorder",
+                snapshot_recorder,
                 "--output",
-                os.path.join(session_dir, "snapshot"),
+                os.path.join(session_dir, SNAPSHOT_BAG),
             ],
         ),
         ExecuteProcess(
@@ -81,16 +96,22 @@ def launch_setup(context):
                 "--storage",
                 "mcap",
                 "--node-name",
-                "failure_static_recorder",
+                static_recorder,
                 "--output",
-                os.path.join(session_dir, "static"),
+                os.path.join(session_dir, STATIC_BAG),
             ],
         ),
         Node(
             package="duatic_monitoring",
             executable="failure_snapshot_trigger_node",
             name="failure_snapshot_trigger",
-            parameters=[{"session_dir": session_dir}],
+            parameters=[
+                {
+                    "session_dir": session_dir,
+                    "snapshot_service": f"/{snapshot_recorder}/snapshot",
+                    "static_split_service": f"/{static_recorder}/split_bagfile",
+                }
+            ],
         ),
     ]
 
