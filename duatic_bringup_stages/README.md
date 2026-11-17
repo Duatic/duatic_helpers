@@ -40,8 +40,9 @@ After `timeout` seconds the gate logs every check that has not passed and exits 
 A gate only checks the start of its stage. Nothing watches a stage once it is ready.
 
 ## Stages
-- Every configurable stage has a `require_<stage>` argument, `true` by default. If a required stage fails, the launch shuts down with the reason. If it is set to `false`, the launch continues without the stage and skips the stages that come after it. A skipped stage that is itself required still shuts the launch down. A stage built with `configurable=False` is always required.
-- The processes a failed stage started keep running.
+- Every configurable stage has a `require_<stage>` argument, `true` by default. If a required stage fails, the launch shuts down with the reason and `ros2 launch` exits with code 1. If it is set to `false`, the launch stops the processes of the stage, continues without it and skips the stages that come after it. A skipped stage that is itself required still shuts the launch down. A stage built with `configurable=False` is always required.
+- A failed optional stage stops the processes it started, also those in launch files it includes. A process its actions start only later, for example from an event handler, is not stopped. A process that shuts the launch down when it exits, through `on_exit`, does so also when its stage is stopped.
+- `abort(reason)` returns an action that shuts the launch down so that `ros2 launch` exits with code 1, for example as the `on_exit` of a process the launch cannot run without.
 - Declare the `require_<stage>` and `stage_timeout_scale` arguments with `stage_arguments` in `generate_launch_description`, so that `ros2 launch <package> <file> --show-args` lists them.
 - Place `staged(...)` where the stages should take their namespace, launch arguments and environment from, for example after `PushRosNamespace` in a `GroupAction`. Each stage runs in its own scope, so launch configurations set by one stage are not seen by the others.
 - A launch file started by a stage can run its own `staged(...)`. Those stages are not part of the outer graph: stages that come after the outer stage do not wait for them. Stage names must be unique across all graphs in one namespace, because each gate node is named `<stage>_gate`.
