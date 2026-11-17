@@ -25,6 +25,7 @@
 
 import os
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Iterable, List, Sequence
 
@@ -36,10 +37,12 @@ from launch.actions import (
     LogInfo,
     OpaqueFunction,
     RegisterEventHandler,
+    SetEnvironmentVariable,
 )
+from launch.actions.execute_local import ExecuteLocal
 from launch.event_handlers import OnProcessExit
-from launch.events import Shutdown
-from launch.substitutions import LaunchConfiguration
+from launch.events.process import ShutdownProcess
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -124,6 +127,29 @@ def gate(
     )
 
 
+def abort(reason: str) -> OpaqueFunction:
+    """Shut the launch down with the reason, so that ros2 launch exits with code 1."""
+
+    def raise_reason(context):
+        if context.is_shutdown:
+            return None
+        raise RuntimeError(reason)
+
+    return OpaqueFunction(function=raise_reason)
+
+
+# Every process a stage starts carries the stage's token, so a failed stage can stop its processes
+STAGE_TOKENS = "DUATIC_BRINGUP_STAGES"
+
+
+def _processes_of(token):
+    def matches(action):
+        details = action.process_details if isinstance(action, ExecuteLocal) else None
+        return bool(details) and token in details["env"].get(STAGE_TOKENS, "").split(":")
+
+    return matches
+
+
 def staged(stages: Sequence[Stage]) -> OpaqueFunction:
     """Return the action that runs the stages. Place it where the stages should take their namespace from."""
     _validate(stages)
@@ -168,6 +194,7 @@ def _run(context, stages: List[Stage]):
     configurations = dict(context.launch_configurations)
     environment = dict(os.environ)
     status = {stage.name: "pending" for stage in stages}
+    tokens = {stage.name: uuid.uuid4().hex for stage in stages}
 
     def in_scope(actions):
         def restore(scope_context):
@@ -203,6 +230,14 @@ def _run(context, stages: List[Stage]):
             GroupAction(
                 [
                     LogInfo(msg=f"Starting stage '{stage.name}'"),
+                    SetEnvironmentVariable(
+                        STAGE_TOKENS,
+                        [
+                            EnvironmentVariable(STAGE_TOKENS, default_value=""),
+                            ":",
+                            tokens[stage.name],
+                        ],
+                    ),
                     RegisterEventHandler(
                         OnProcessExit(target_action=stage.gate, on_exit=on_gate_exit)
                     ),
@@ -222,16 +257,20 @@ def _run(context, stages: List[Stage]):
         return actions
 
     def fail(stage, reason):
+        status_before_failure = status[stage.name]
         status[stage.name] = "failed"
         if required(stage):
-            message = f"Stage '{stage.name}' failed, {reason}. Aborting the launch"
-            return [LogInfo(msg=message), EmitEvent(event=Shutdown(reason=message))]
+            return [abort(f"Stage '{stage.name}' failed, {reason}. Aborting the launch")]
         actions = [
             LogInfo(
-                msg=f"Stage '{stage.name}' failed, {reason}. Continuing without it "
+                msg=f"Stage '{stage.name}' failed, {reason}. Stopping it and continuing without it "
                 f"({require_argument(stage.name)} is false)"
             )
         ]
+        if status_before_failure == "starting":
+            actions.append(
+                EmitEvent(event=ShutdownProcess(process_matcher=_processes_of(tokens[stage.name])))
+            )
         for dependent in stages:
             if status[dependent.name] == "pending" and stage.name in dependent.after:
                 actions += fail(dependent, f"it needs stage '{stage.name}'")

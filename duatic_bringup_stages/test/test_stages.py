@@ -111,7 +111,7 @@ def test_stages_start_in_dependency_order():
         r.stage("core", 0, configurable=False),
         r.stage("imu", 0, delay=0.5),
     ]
-    r.run([*declared(stages), staged(stages)])
+    assert r.run([*declared(stages), staged(stages)]) == 0
 
     assert set(r.started) == {"core", "imu", "estimation", "navigation"}
     assert r.started.index("estimation") > max(r.started.index("core"), r.started.index("imu"))
@@ -138,7 +138,7 @@ def test_required_stage_failure_aborts_and_starts_nothing_after_it():
         r.stage("imu", 1),
         r.stage("estimation", 0, after=["imu"]),
     ]
-    r.run([*declared(stages), staged(stages)])
+    assert r.run([*declared(stages), staged(stages)]) == 1
 
     assert "estimation" not in r.started
     assert r.aborted
@@ -148,7 +148,7 @@ def test_required_stage_failure_aborts_and_starts_nothing_after_it():
 def test_core_cannot_be_made_optional():
     r = Recorder()
     stages = [r.stage("core", 1, configurable=False), r.stage("arms", 0, after=["core"])]
-    r.run([*declared(stages), staged(stages)], arguments=[("require_core", "false")])
+    assert r.run([*declared(stages), staged(stages)], arguments=[("require_core", "false")]) == 1
 
     assert "arms" not in r.started
     assert r.aborted
@@ -276,3 +276,56 @@ def test_stage_arguments_default_to_required():
     assert require.choices == ["true", "false"]
     assert timeout_scale.name == "stage_timeout_scale"
     assert timeout_scale.default_value[0].text == "1.0"
+
+
+CHECKER = """
+import os, sys, time
+time.sleep(3)
+def count(arguments):
+    found = []
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if f.read().split(b"\\0")[:2] == [b"sleep", arguments.encode()]:
+                    found.append(int(pid))
+        except OSError:
+            pass
+    return found
+failed, kept = count("61"), count("62")
+with open(sys.argv[1], "w") as f:
+    f.write(f"{len(failed)} {len(kept)}")
+for pid in kept:
+    os.kill(pid, 15)
+"""
+
+
+def test_failed_optional_stage_stops_its_processes(tmp_path):
+    result = tmp_path / "alive.txt"
+    failing = Stage(
+        name="imu",
+        actions=[
+            ExecuteProcess(cmd=["sleep", "61"]),
+            IncludeLaunchDescription(
+                LaunchDescriptionSource(LaunchDescription([ExecuteProcess(cmd=["sleep", "61"])]))
+            ),
+        ],
+        gate=stub_gate(1, delay=1.0),
+    )
+    kept = Stage(
+        name="lidars",
+        actions=[
+            ExecuteProcess(cmd=["sleep", "62"]),
+            ExecuteProcess(cmd=[sys.executable, "-c", CHECKER, str(result)]),
+        ],
+        gate=stub_gate(0),
+    )
+    r = Recorder()
+    exit_code = r.run(
+        [*stage_arguments(["imu", "lidars"]), staged([failing, kept])],
+        arguments=[("require_imu", "false")],
+    )
+
+    assert exit_code == 0
+    assert not r.aborted
+    # No process of the failed stage is left, the other stage's process still ran
+    assert result.read_text() == "0 1"
