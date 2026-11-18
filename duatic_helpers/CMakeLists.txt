@@ -25,6 +25,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_test REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
 
+  duatic_add_pytest_test(test_add_controllers test/test_add_controllers.py
+  )
   duatic_add_pytest_test(test_rewritten_yaml test/test_rewritten_yaml.py
   )
   duatic_add_pytest_test(test_launch_config_as_bool test/test_launch_config_as_bool.py

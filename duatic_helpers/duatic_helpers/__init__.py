@@ -37,6 +37,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .add_controllers import add_controllers
 from .has_node_params import HasNodeParams
 from .launch_config_as_bool import LaunchConfigAsBool
 from .launch_helper import simulator_not_subcomponent_condition
@@ -57,6 +58,7 @@ __all__ = [
     "LaunchConfigAsBool",
     "ReplaceString",
     "RewrittenYaml",
+    "add_controllers",
     "simulator_not_subcomponent_condition",
     # Test Helpers
     "wait_for_controller_states",
