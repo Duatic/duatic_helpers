@@ -29,6 +29,8 @@ triggers the snapshot. Each launch writes to its own directory under snapshot_ro
 
 Open the snapshot files one at a time, or run `ros2 bag reindex` on the bag directory
 first: its metadata can be missing, or list snapshots that were removed since.
+`ros2 run duatic_monitoring failure_snapshot_logs <session dir>` prints the events and the
+recorded ROS log messages as text.
 """
 
 import fcntl
