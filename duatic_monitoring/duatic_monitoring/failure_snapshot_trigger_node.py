@@ -199,11 +199,16 @@ class FailureSnapshotTriggerNode(Node):
         self._last_trigger_ns: Optional[int] = None
         self._static_split_requested = False
 
-        removed = prune_sessions(
-            self._session_dir.parent, self._session_dir, self.get_parameter("max_sessions").value
-        )
-        if removed:
-            self.get_logger().info(f"Removed {len(removed)} old snapshot session(s)")
+        try:
+            removed = prune_sessions(
+                self._session_dir.parent,
+                self._session_dir,
+                self.get_parameter("max_sessions").value,
+            )
+            if removed:
+                self.get_logger().info(f"Removed {len(removed)} old snapshot session(s)")
+        except OSError as e:
+            self.get_logger().error(f"Cannot prune old snapshot sessions: {e}")
 
         self._snapshot_client = self.create_client(
             Snapshot, self.get_parameter("snapshot_service").value

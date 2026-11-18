@@ -63,7 +63,7 @@ def launch_setup(context):
         os.makedirs(session_dir)
         # A raw descriptor, never closed: the lock lasts until the launch process exits,
         # so another launch does not prune this session.
-        lock = os.open(os.path.join(session_dir, LOCK_FILE), os.O_CREAT | os.O_WRONLY)
+        lock = os.open(os.path.join(session_dir, LOCK_FILE), os.O_CREAT | os.O_WRONLY, 0o644)
         fcntl.flock(lock, fcntl.LOCK_EX)
     except OSError as e:
         # The robot starts without it.
