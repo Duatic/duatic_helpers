@@ -56,7 +56,7 @@ def simulator_not_subcomponent_condition(simulator: str) -> IfCondition:
 
 
 def process_robot_description(
-    urdf_file_path: str, srdf_file_path: str | None = None, mappings: dict[str, Any] | None = None
+    urdf_file_path: str, srdf_file_path: str = "", *, mappings: dict[str, Any] | None = None
 ) -> str:
     """
     Parses the URDF and SRDF xacro files into a common robot description.
@@ -65,7 +65,7 @@ def process_robot_description(
     appending the SRDF presents no issue.
 
     :param urdf_file_path: Path to the URDF file
-    :param srdf_file_path: Path to the SRDF file
+    :param srdf_file_path: Path to the SRDF file (optional)
     :param mappings: Mappings to pass to the xacro files
 
     :returns: The combined robot description string
@@ -73,13 +73,13 @@ def process_robot_description(
     """
     if not os.path.exists(urdf_file_path):
         raise FileNotFoundError(f"Could not find URDF file at {urdf_file_path}")
-    if srdf_file_path is not None and not os.path.exists(srdf_file_path):
+    if srdf_file_path and not os.path.exists(srdf_file_path):
         raise FileNotFoundError(f"Could not find SRDF file at {srdf_file_path}")
 
     # Process URDF
     urdf_doc = xacro.process_file(urdf_file_path, mappings=mappings)
 
-    if srdf_file_path is not None:
+    if srdf_file_path:
         # Process SRDF
         srdf_doc = xacro.process_file(srdf_file_path, mappings=mappings)
 
