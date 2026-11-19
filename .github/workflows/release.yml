@@ -12,6 +12,7 @@ on:
           - duatic_helpers
           - duatic_kinematics
           - duatic_monitoring
+          - duatic_robot_logging
       bump:
         description: 'Override the bump derived from the commits'
         type: choice
