@@ -39,7 +39,7 @@
 
 from .has_node_params import HasNodeParams
 from .launch_config_as_bool import LaunchConfigAsBool
-from .launch_helper import simulator_not_subcomponent_condition
+from .launch_helper import simulator_not_subcomponent_condition, process_robot_description
 from .replace_string import ReplaceString
 from .rewritten_yaml import RewrittenYaml
 from .test_helper import (
@@ -58,6 +58,7 @@ __all__ = [
     "ReplaceString",
     "RewrittenYaml",
     "simulator_not_subcomponent_condition",
+    "process_robot_description",
     # Test Helpers
     "wait_for_controller_states",
     "wait_for_message",

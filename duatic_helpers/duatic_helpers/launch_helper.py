@@ -21,6 +21,9 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
+from typing import Any
+import os
+import xacro
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 
@@ -50,3 +53,39 @@ def simulator_not_subcomponent_condition(simulator: str) -> IfCondition:
             ]
         )
     )
+
+
+def process_robot_description(
+    urdf_file_path: str, srdf_file_path: str = "", *, mappings: dict[str, Any] | None = None
+) -> str:
+    """
+    Parses the URDF and SRDF xacro files into a common robot description.
+
+    As the consumers of the robot description usually ignore unknown tags,
+    appending the SRDF presents no issue.
+
+    :param urdf_file_path: Path to the URDF file
+    :param srdf_file_path: Path to the SRDF file (optional)
+    :param mappings: Mappings to pass to the xacro files
+
+    :returns: The combined robot description string
+    :raises: FileNotFoundError for non-existing input files
+    """
+    if not os.path.exists(urdf_file_path):
+        raise FileNotFoundError(f"Could not find URDF file at {urdf_file_path}")
+    if srdf_file_path and not os.path.exists(srdf_file_path):
+        raise FileNotFoundError(f"Could not find SRDF file at {srdf_file_path}")
+
+    # Process URDF
+    urdf_doc = xacro.process_file(urdf_file_path, mappings=mappings)
+
+    if srdf_file_path:
+        # Process SRDF
+        srdf_doc = xacro.process_file(srdf_file_path, mappings=mappings)
+
+        # Append SRDF to URDF
+        urdf_root = urdf_doc.documentElement
+        for node in list(srdf_doc.documentElement.childNodes):
+            urdf_root.appendChild(urdf_doc.importNode(node, deep=True))
+
+    return urdf_doc.toxml()
