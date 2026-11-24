@@ -2,6 +2,10 @@
 Changelog for package duatic_helpers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.2.0 (2026-11-24)
+------------------
+* feat: Add 'process_robot_description' helper (#82)
+
 2.1.0 (2026-11-17)
 ------------------
 * feat(test): Add URDF and SRDF test macros  (#77)
