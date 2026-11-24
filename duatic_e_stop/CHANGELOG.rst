@@ -1,3 +1,7 @@
+1.6.0 (2026-11-24)
+------------------
+* feat(brake_release_node)!: start the brake release on press and rumble when done (#59)
+
 1.5.0 (2026-11-06)
 ------------------
 * feat(brake_release): add brake_release_node (#21)
