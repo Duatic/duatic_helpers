@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>Robot host log retention: a persistent, size-capped journal and the directory failure snapshots are written to</description>
 
-  <maintainer email="info@duatic.com">Duatic AG</maintainer>
+  <maintainer email="vpapaspyros@duatic.com">Vaios Papaspyros</maintainer>
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>cmake</buildtool_depend>
