@@ -30,8 +30,9 @@ def fake(kind: str, name: str, namespace: str, **parameters) -> ExecuteProcess:
 
 
 def supervisor(namespace: str, stages: str) -> Node:
-    """The supervisor process, reading ``stages`` as its only stage file."""
-    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+    """The supervisor process, with ``stages`` as the base file of its stage directory."""
+    directory = tempfile.mkdtemp()
+    with open(os.path.join(directory, "stages.yaml"), "w") as f:
         f.write(textwrap.dedent(stages))
     return Node(
         package="duatic_bringup_supervisor",
@@ -39,7 +40,7 @@ def supervisor(namespace: str, stages: str) -> Node:
         name="bringup_supervisor",
         namespace=namespace,
         output="screen",
-        parameters=[{"stage_files": [f.name], "watch_period": 0.5}],
+        parameters=[{"directory": directory, "watch_period": 0.5}],
     )
 
 

@@ -5,7 +5,9 @@
 
 Parameters:
 
-- ``stage_files``: the base stage file, then the overlays in the order they apply
+- ``directory``: the robot's stage directory
+- ``overlays``: comma-separated overlay names, for this robot and the robots it includes
+- ``optional_files``: comma-separated overlay files applied last, such as a robot's own config
 - ``timeout_scale``: factor applied to every stage timeout
 - ``require.<stage>``: ``true`` or ``false`` overrides the stage's ``required``, empty keeps it
 - ``vars.<name>``: value for ``${name}`` in the stage files
@@ -45,6 +47,24 @@ LEVELS = {
 }
 
 
+STATUS_SEPARATOR = ": "
+
+
+def status_name(node_name: str, stage: str) -> str:
+    """The diagnostic status name of a stage, see :func:`stage_of_status`."""
+    return f"{node_name}{STATUS_SEPARATOR}{stage}"
+
+
+def stage_of_status(name: str) -> str:
+    """The stage a diagnostic status name of the supervisor refers to."""
+    return name.rsplit(STATUS_SEPARATOR, 1)[-1]
+
+
+def _names(value) -> list[str]:
+    """The entries of a comma-separated parameter; a list parameter cannot be empty in ROS."""
+    return [name for name in str(value).split(",") if name]
+
+
 class Supervisor(Node):
     """Starts the stages of a stage graph and keeps track of their state."""
 
@@ -52,15 +72,18 @@ class Supervisor(Node):
         """Load the stage graph from the parameters and prepare every stage's parts."""
         super().__init__("bringup_supervisor", automatically_declare_parameters_from_overrides=True)
         self.group = ReentrantCallbackGroup()
-        files = self.get_parameter_or("stage_files", None)
-        if files is None or not files.value:
-            raise graph.StageGraphError("The 'stage_files' parameter names no stage file")
+        overlays = _names(self._parameter("overlays", ""))
+        files = [
+            *graph.stage_files(str(self._parameter("directory", "")), overlays),
+            *_names(self._parameter("optional_files", "")),
+        ]
         self.stages = graph.parse(
-            graph.load_files(files.value),
+            graph.load_files(files),
             variables=self._by_prefix("vars"),
             # Launch turns "true" into a boolean parameter, so compare in lower case
             required={k: v.lower() for k, v in self._by_prefix("require").items()},
             timeout_scale=float(self._parameter("timeout_scale", "1.0")),
+            overlays=overlays,
         )
         self.watch_period = float(self._parameter("watch_period", 1.0))
         # Set when a stage is stopped, so that a start still waiting in its thread ends early
@@ -248,7 +271,7 @@ class Supervisor(Node):
             statuses = [
                 DiagnosticStatus(
                     level=self._level(name, status),
-                    name=f"{self.get_name()}: {name}",
+                    name=status_name(self.get_name(), name),
                     message=status + (f", {self.reason[name]}" if self.reason[name] else ""),
                     values=[
                         KeyValue(key="state", value=status),

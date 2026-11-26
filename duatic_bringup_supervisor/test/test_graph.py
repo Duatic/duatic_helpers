@@ -10,9 +10,12 @@ from duatic_bringup_supervisor.graph import (
     StageGraphError,
     TopicCheck,
     dependents,
+    expand,
     load_files,
     merge,
+    overlay_names,
     parse,
+    stage_files,
     startable,
     stop_order,
     topological_order,
@@ -156,6 +159,136 @@ def test_load_files_applies_overlays_in_order(tmp_path):
     assert not stages["odom"].required
 
 
-def test_load_files_needs_a_stages_mapping(tmp_path):
-    with pytest.raises(StageGraphError, match="top-level 'stages'"):
+def test_load_files_rejects_unknown_top_level_keys(tmp_path):
+    with pytest.raises(StageGraphError, match="unknown keys"):
         load_files([write(tmp_path, "bad.yaml", "imu: {timeout: 1}\n")])
+
+
+def robot(tmp_path, name, files):
+    """Write a robot's stage directory and return it."""
+    directory = tmp_path / name
+    directory.mkdir()
+    for file_name, text in files.items():
+        write(directory, file_name, text)
+    return str(directory)
+
+
+def packages(tmp_path, **robots):
+    """Write stage directories for fake packages and return a resolver for them."""
+    directories = {name: robot(tmp_path, name, files) for name, files in robots.items()}
+    return lambda package: directories[package]
+
+
+ROVER_FILES = {
+    "stages.yaml": """
+        stages:
+          core:
+            timeout: 10
+            delegate: {ros2_control: {controllers_config: "${cfg}"}}
+          imu: {timeout: 5, lifecycle_nodes: [imu_driver]}
+          nav:
+            after: [core, imu]
+            timeout: 20
+            delegate: {nav2: [lifecycle_manager]}
+            ready: {topics: [odom]}
+        """,
+    "sim.yaml": """
+        stages:
+          imu: null
+          nav: {after: [core]}
+        """,
+}
+
+
+def test_include_prefixes_and_binds_stages(tmp_path):
+    find = packages(tmp_path, rover=ROVER_FILES)
+    document = {
+        "include": {"rover": {"package": "rover", "bind": {"core": "core"}}},
+        "stages": {"core": {"timeout": 30}, "rover_nav": {"required": False}},
+    }
+    stages = parse(document, variables={"cfg": ""}, find_directory=find)
+    assert list(stages) == ["rover_imu", "rover_nav", "core"]
+    assert stages["rover_nav"].after == ("core", "rover_imu")
+    assert stages["rover_imu"].lifecycle_nodes == ("imu_driver",)
+    assert not stages["rover_nav"].required
+    assert stages["core"].timeout == 30
+
+
+def test_included_robots_get_the_overlays_they_have(tmp_path):
+    find = packages(tmp_path, rover=ROVER_FILES)
+    document = {"include": {"rover": {"package": "rover"}}}
+    # The rover has a sim overlay but no mapping overlay, which is skipped
+    stages = parse(
+        document, variables={"cfg": ""}, find_directory=find, overlays=["mapping", "sim"]
+    )
+    assert list(stages) == ["rover_core", "rover_nav"]
+    assert stages["rover_nav"].after == ("rover_core",)
+
+
+def test_includes_nest(tmp_path):
+    find = packages(
+        tmp_path,
+        rover=ROVER_FILES,
+        torso={
+            "stages.yaml": """
+                include:
+                  rover: {package: rover}
+                stages:
+                  arms: {timeout: 5, after: [rover_core]}
+                """
+        },
+    )
+    stages = parse(
+        {"include": {"torso": {"package": "torso"}}}, {"cfg": "/c.yaml"}, find_directory=find
+    )
+    assert stages["torso_rover_core"].ros2_control.controllers_config == "/c.yaml"
+    assert stages["torso_arms"].after == ("torso_rover_core",)
+    assert stages["torso_rover_nav"].after == ("torso_rover_core", "torso_rover_imu")
+
+
+def test_overlay_names_include_those_of_included_robots(tmp_path):
+    find = packages(
+        tmp_path,
+        rover=ROVER_FILES,
+        dxtr={"stages.yaml": "include:\n  rover: {package: rover}\n", "mock.yaml": "stages: {}\n"},
+    )
+    assert overlay_names(find("dxtr"), find) == {"mock", "sim"}
+
+
+def test_expand_without_variables_lists_names_only(tmp_path):
+    find = packages(tmp_path, rover=ROVER_FILES)
+    document = {"include": {"a": {"package": "rover"}, "b": {"package": "${tool_package}"}}}
+    assert list(expand(document, find_directory=find)["stages"]) == ["a_core", "a_imu", "a_nav"]
+
+
+@pytest.mark.parametrize(
+    "include, message",
+    [
+        ({"directory": "/somewhere"}, "unknown keys"),
+        ({}, "needs a 'package'"),
+        ({"package": "rover", "bind": {"core": "core"}}, "bound to stages that do not exist"),
+    ],
+)
+def test_invalid_includes_are_rejected(tmp_path, include, message):
+    find = packages(tmp_path, rover=ROVER_FILES)
+    with pytest.raises(StageGraphError, match=message):
+        parse({"include": {"rover": include}}, variables={"cfg": ""}, find_directory=find)
+
+
+def test_included_stage_names_must_not_collide(tmp_path):
+    find = packages(
+        tmp_path,
+        first={"stages.yaml": "stages:\n  b_c: {timeout: 1}\n"},
+        second={"stages.yaml": "stages:\n  c: {timeout: 1}\n"},
+    )
+    # Prefix a with stage b_c and prefix a_b with stage c both make a_b_c
+    document = {"include": {"a": {"package": "first"}, "a_b": {"package": "second"}}}
+    with pytest.raises(StageGraphError, match="exists twice"):
+        parse(document, find_directory=find)
+
+
+def test_stage_files_skips_overlays_a_robot_does_not_have(tmp_path):
+    rover = robot(tmp_path, "rover", ROVER_FILES)
+    assert stage_files(rover, ["mapping", "sim"]) == [f"{rover}/stages.yaml", f"{rover}/sim.yaml"]
+    with pytest.raises(StageGraphError, match="not found"):
+        stage_files(str(tmp_path))

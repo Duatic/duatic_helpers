@@ -1,11 +1,19 @@
 # Copyright 2026 Duatic AG
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Stage graph of a robot bringup: loading, merging and checking stage files.
+"""Stage graph of a robot bringup: loading, merging, composing and checking stage files.
+
+A robot keeps its stage files in ``<package share>/config/stages/``: ``stages.yaml`` is the base,
+every other file is an overlay picked by name. A robot built from other robots includes their
+stage files under a prefix, so that one supervisor runs the whole graph.
 
 This module does not use ROS, so the graph rules can be tested without a running system.
 """
 
+import copy
+import functools
+import glob
+import os
 import re
 from graphlib import CycleError, TopologicalSorter
 from dataclasses import dataclass, field
@@ -16,6 +24,9 @@ import yaml
 STAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
+BASE_FILE = "stages.yaml"
+DOCUMENT_KEYS = {"include", "stages"}
+INCLUDE_KEYS = {"package", "bind"}
 STAGE_KEYS = {"after", "required", "timeout", "lifecycle_nodes", "delegate", "ready"}
 DELEGATE_KEYS = {"nav2", "ros2_control"}
 ROS2_CONTROL_KEYS = {"controller_manager", "controllers_config", "manage"}
@@ -85,21 +96,133 @@ def merge(base: Any, overlay: Any) -> Any:
     return merged
 
 
+def stage_files(directory: str, overlays: Sequence[str] = ()) -> list[str]:
+    """The base stage file of a directory, then those of the named overlays it has, in order.
+
+    A robot only has the overlays it needs (no ``mapping.yaml`` for a robot without navigation),
+    so names without a file are skipped.
+
+    :raises StageGraphError: When the directory has no base stage file.
+    """
+    base = os.path.join(directory, BASE_FILE)
+    if not os.path.exists(base):
+        raise StageGraphError(f"Stage file not found: {base}")
+    paths = [os.path.join(directory, name + ".yaml") for name in overlays]
+    return [base, *[path for path in paths if os.path.exists(path)]]
+
+
+@functools.lru_cache
+def package_stage_directory(package: str) -> str:
+    """The stage directory of a ROS package: ``<share>/config/stages``."""
+    from ament_index_python.packages import get_package_share_directory
+
+    return os.path.join(get_package_share_directory(package), "config", "stages")
+
+
+@functools.lru_cache
+def _read(path: str) -> dict:
+    """One stage file, checked; cached, so callers get a copy from :func:`load_files`."""
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    _check_keys(path, data, DOCUMENT_KEYS)
+    for key in DOCUMENT_KEYS & set(data):
+        if not isinstance(data[key], dict):
+            raise StageGraphError(f"{path}: '{key}' must be a mapping")
+    return data
+
+
 def load_files(paths: Iterable[str]) -> dict:
     """Load stage files and merge each one over the ones before it.
 
     :param paths: The base file first, then the overlays in the order they apply.
     :returns: The merged document.
-    :raises StageGraphError: When a file has no top-level ``stages`` mapping.
+    :raises StageGraphError: When a file has other top-level keys than ``include`` and ``stages``.
     """
     document: dict = {"stages": {}}
     for path in paths:
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
-        if not isinstance(data.get("stages"), dict):
-            raise StageGraphError(f"{path}: expected a top-level 'stages' mapping")
-        document = merge(document, data)
+        document = merge(document, copy.deepcopy(_read(path)))
     return document
+
+
+def includes(document: Mapping, find_directory=package_stage_directory):
+    """The includes of a document whose location is known, with their stage directories.
+
+    An include whose ``package`` still holds a ``${variable}`` is skipped, which only happens
+    when names are listed without values.
+
+    :yields: ``(prefix, bind, directory)`` for each include.
+    :raises StageGraphError: For an invalid prefix or include entry.
+    """
+    for prefix, entry in (document.get("include") or {}).items():
+        where = f"include '{prefix}'"
+        if not STAGE_NAME.fullmatch(prefix):
+            raise StageGraphError(f"{where}: a prefix is letters, digits and underscores")
+        entry = _check_keys(where, entry, INCLUDE_KEYS)
+        if "package" not in entry:
+            raise StageGraphError(f"{where}: an include needs a 'package'")
+        if not VARIABLE.search(entry["package"]):
+            yield prefix, entry.get("bind") or {}, find_directory(entry["package"])
+
+
+def overlay_names(directory: str, find_directory=package_stage_directory) -> set[str]:
+    """The overlay names of a stage directory and of every robot it includes."""
+    names = {
+        os.path.splitext(os.path.basename(path))[0]
+        for path in glob.glob(os.path.join(directory, "*.yaml"))
+    } - {os.path.splitext(BASE_FILE)[0]}
+    for _, _, child in includes(load_files(stage_files(directory)), find_directory):
+        names |= overlay_names(child, find_directory)
+    return names
+
+
+def expand(
+    document: Mapping,
+    variables: Mapping[str, str] | None = None,
+    find_directory=package_stage_directory,
+    overlays: Sequence[str] = (),
+) -> dict:
+    """Replace the document's includes with the stages of the included robots.
+
+    An include is keyed by its prefix: its stage ``core`` becomes ``<prefix>_core``, unless
+    ``bind`` maps it to a stage of the including robot, which then takes its place. An included
+    robot runs with the overlays the including robot runs with, those it has: a robot started in
+    simulation runs its parts in simulation. The including robot's own stages are merged last,
+    so that it can change any included stage.
+
+    :param document: A merged document, see :func:`load_files`.
+    :param variables: Values for ``${name}``, ``None`` to leave them in place (for listing names).
+    :param find_directory: Resolves an include's ``package`` to its stage directory.
+    :param overlays: Names of the overlays the including robot runs with.
+    :returns: A document with only ``stages``.
+    :raises StageGraphError: For a bad include entry, colliding names or a missing bind target.
+    """
+    if variables is not None:
+        document = substitute(dict(document), variables)
+    stages: dict = {}
+    bound: set[str] = set()
+    for prefix, bind, directory in includes(document, find_directory):
+        child = expand(
+            load_files(stage_files(directory, overlays)), variables, find_directory, overlays
+        )
+        bound.update(bind.values())
+
+        def rename(name: str) -> str:
+            """The name of an included stage in the including graph."""
+            return bind.get(name, f"{prefix}_{name}")
+
+        for name, data in child["stages"].items():
+            if name in bind:
+                continue
+            if rename(name) in stages:
+                raise StageGraphError(f"include '{prefix}': stage '{rename(name)}' exists twice")
+            data = data or {}
+            data["after"] = [rename(dependency) for dependency in data.get("after") or []]
+            stages[rename(name)] = data
+    expanded = merge({"stages": stages}, {"stages": document.get("stages") or {}})
+    missing = sorted(bound - set(expanded["stages"]))
+    if missing:
+        raise StageGraphError(f"Included stages are bound to stages that do not exist: {missing}")
+    return expanded
 
 
 def substitute(value: Any, variables: Mapping[str, str]) -> Any:
@@ -192,6 +315,8 @@ def parse(
     variables: Mapping[str, str] | None = None,
     required: Mapping[str, str] | None = None,
     timeout_scale: float = 1.0,
+    find_directory=package_stage_directory,
+    overlays: Sequence[str] = (),
 ) -> dict[str, Stage]:
     """Build and check the stage graph of a merged document.
 
@@ -199,12 +324,14 @@ def parse(
     :param variables: Values for ``${name}`` in the document.
     :param required: Per stage ``"true"``, ``"false"`` or ``""`` (keep the file's value).
     :param timeout_scale: Factor applied to every stage timeout.
+    :param find_directory: Resolves an include's ``package`` to its stage directory.
+    :param overlays: Names of the overlays the document was loaded with, passed on to includes.
     :returns: The stages by name, in file order.
     :raises StageGraphError: For invalid names, unknown dependencies, cycles or bad entries.
     """
     if not timeout_scale > 0.0:
         raise StageGraphError(f"The timeout scale must be positive, got {timeout_scale}")
-    document = substitute(dict(document), variables or {})
+    document = expand(document, variables or {}, find_directory, overlays)
     required = required or {}
     # An empty override keeps the file's value, so only a set one needs its stage
     unknown_overrides = sorted(

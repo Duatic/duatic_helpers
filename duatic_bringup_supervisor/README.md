@@ -39,9 +39,42 @@ stages:
 | `delegate.ros2_control` | A controller manager. The manager activates its hardware and the spawners the controllers; the stage is ready once every controller in `controllers_config` is in its configured state and all hardware is active. On stop the supervisor deactivates the controllers, then the hardware. `manage: false` only watches it, for a manager that another bringup owns. |
 | `ready.topics` | Topics that must publish. `max_age` also fails the stage when the topic goes quiet after startup. |
 
-Several files are merged in order: the base file first, then overlays. Mappings merge key by key,
-lists are replaced, and `null` removes a key, so an overlay can drop a whole stage. `${name}` takes
-the value of the supervisor's `vars.<name>` parameter.
+A robot keeps its stage files in `<package share>/config/stages/`: `stages.yaml` is the base,
+every other file is an overlay named after what selects it (`sim`, `mock`, `mapping`, ...). Files
+merge in order: mappings key by key, lists are replaced, and `null` removes a key, so an overlay
+can drop a whole stage. `${name}` takes the value of the supervisor's `vars.<name>` parameter.
+
+## Robots built from robots
+
+One supervisor runs the whole robot. A robot built from other robots includes their stage files
+instead of starting their supervisors:
+
+```yaml
+# duatic_dxtr_bringup/config/stages/stages.yaml
+include:
+  rover:
+    package: duatic_duarover_bringup
+    bind: {core: core}                 # the rover's core is the DXTR's core
+  torso:
+    package: duatic_duatorso_bringup
+    bind: {core: core}
+stages:
+  core: {timeout: 120, delegate: {ros2_control: {controllers_config: ${controllers_config}}}}
+```
+
+| Include key | Meaning |
+| --- | --- |
+| prefix (the key) | Included stage `imu` becomes `rover_imu`, also in `after` lists and `require_<stage>` |
+| `package` | The included robot's bringup package, holding `config/stages/` |
+| `bind` | Maps an included stage onto a stage of the including robot, which replaces it; used for the one ros2_control a composed robot has |
+
+An included robot runs with the overlays the including robot runs with, those it has, so a DXTR
+in simulation runs the rover's `sim.yaml`. Included names must not collide, and every `bind`
+target must be a stage of the including robot.
+
+Includes nest (the DXTR includes the torso, which includes both arms) and the including robot's
+own `stages` merge last, so it can change any included stage, for example
+`rover_navigation: {required: false}`.
 
 ## Launch
 
@@ -49,15 +82,22 @@ the value of the supervisor's `vars.<name>` parameter.
 from duatic_bringup_supervisor.launch_actions import stage_arguments, supervisor
 
 # in generate_launch_description: require_<stage> and stage_timeout_scale
-*stage_arguments(stages_directory),
-# next to the processes, in the robot's namespace
-supervisor([base, overlay], variables={"controllers_config": path}, optional_files=[robot]),
+*stage_arguments("my_robot_bringup"),
+# in launch_setup(context), next to the processes, in the robot's namespace
+*supervisor(context, "my_robot_bringup", ["sim"], variables={"controllers_config": path}),
 ```
 
-`require_<stage>:=true|false` overrides a stage's `required`; empty keeps what the files say.
-`stage_timeout_scale` multiplies every timeout. Files in `optional_files` apply last and only when
-they exist, for a robot's own configuration. When the supervisor exits, the launch ends; a
-non-zero exit makes `ros2 launch` fail.
+`supervisor()` returns nothing when `start_as_subcomponent` is true, read before any include of
+the calling launch file can change it: the robot that includes this one runs its stages.
+Overlay names without a file are skipped, so a launch file can pass its variant and map mode as
+they are. `require_<stage>:=true|false` overrides a stage's `required`; empty keeps what the
+files say, and a set one that names no stage makes the supervisor (and so the launch) fail.
+`stage_timeout_scale` multiplies every timeout. `/ros2_ws/robot_config/stages.yaml` applies
+last when it exists, for a robot's own configuration. When the supervisor exits, the launch
+ends; a non-zero exit makes `ros2 launch` fail.
+
+`duatic_bringup_supervisor.testing.wait_for_stages` waits in a launch test until every stage is
+ready.
 
 ## Running
 
