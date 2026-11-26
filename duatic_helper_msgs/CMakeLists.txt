@@ -16,6 +16,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   # has no business pulling in a whole simulation to get two service definitions.
   "srv/AttachModel.srv"
   "srv/DetachModel.srv"
+  # Failure snapshots in duatic_monitoring, callable by any watchdog.
+  "srv/TriggerSnapshot.srv"
 )
 
 ament_package()

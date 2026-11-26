@@ -1,0 +1,8 @@
+# Ask duatic_monitoring's failure_snapshot node to write its rosbag2 snapshot to disk.
+
+# Why, recorded in the session's events.txt.
+string reason
+---
+# True once the snapshot is on disk.
+bool success
+string message
