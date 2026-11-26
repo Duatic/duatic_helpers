@@ -9,6 +9,7 @@ on:
         options:
           - duatic_e_stop
           - duatic_helper_msgs
+          - duatic_bringup_supervisor
           - duatic_helpers
           - duatic_kinematics
           - duatic_monitoring
