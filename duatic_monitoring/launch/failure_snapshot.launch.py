@@ -21,11 +21,13 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-"""Records a rosbag2 snapshot of the topic data around a hardware e-stop.
+"""Records a rosbag2 snapshot of the topic data around a failure.
 
 Starts a recorder in snapshot mode that holds the most recent topic data in memory, a
-second recorder for the latched topics the first one does not retain, and the node that
-triggers the snapshot. Each launch writes to its own directory under snapshot_root.
+second recorder for the latched topics the first one does not retain, the failure_snapshot
+node that has the recorder write its buffer when its ~/trigger service is called, and the
+estop_monitor node that calls it on a hardware e-stop. Each launch writes to its own
+directory under snapshot_root.
 
 Open the snapshot files one at a time, or run `ros2 bag reindex` on the bag directory
 first: its metadata can be missing, or list snapshots that were removed since.
@@ -43,7 +45,7 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
-from duatic_monitoring.failure_snapshot_trigger_node import (
+from duatic_monitoring.failure_snapshot_node import (
     LOCK_FILE,
     SESSION_NAME_FORMAT,
     SNAPSHOT_BAG,
@@ -118,15 +120,21 @@ def launch_setup(context):
         ),
         Node(
             package="duatic_monitoring",
-            executable="failure_snapshot_trigger_node",
-            name="failure_snapshot_trigger",
+            executable="failure_snapshot_node",
+            name="failure_snapshot",
             parameters=[
                 {
                     "session_dir": session_dir,
                     "snapshot_service": f"/{snapshot_recorder}/snapshot",
                     "static_split_service": f"/{static_recorder}/split_bagfile",
+                    "max_disk_bytes": LaunchConfiguration("snapshot_disk_bytes"),
                 }
             ],
+        ),
+        Node(
+            package="duatic_monitoring",
+            executable="estop_monitor_node",
+            name="estop_monitor",
         ),
     ]
 
@@ -145,6 +153,11 @@ def generate_launch_description():
                 "snapshot_buffer_bytes",
                 default_value="250000000",
                 description="Size of the in-memory buffer a snapshot is written from",
+            ),
+            DeclareLaunchArgument(
+                "snapshot_disk_bytes",
+                default_value="20000000000",
+                description="Disk space the snapshots under snapshot_root may take, oldest removed first",
             ),
             OpaqueFunction(function=launch_setup),
         ]

@@ -12,7 +12,7 @@ This repository is structured as a monorepo and contains the following packages:
 
 * **`duatic_helpers`**: General ROS 2 support functionality, including launch and testing utilities.
 * **`duatic_kinematics`**: High-performance, ROS-agnostic robotics mathematics and kinematics solvers (e.g., JAX-optimized Inverse Kinematics using PyRoki).
-* **`duatic_monitoring`**: Hardware monitoring nodes for battery state publishing (gamepad, LiTime BMS, aggregator) and for recording a rosbag snapshot around a hardware e-stop (`failure_snapshot.launch.py`).
+* **`duatic_monitoring`**: Hardware monitoring nodes for battery state publishing (gamepad, LiTime BMS, aggregator) and for recording a rosbag snapshot around a failure (`failure_snapshot.launch.py`). A snapshot is taken on a hardware e-stop, or by any node calling the `failure_snapshot/trigger` service.
 * **`duatic_robot_logging`**: Host configuration, not a ROS package: a persistent, size-capped journal and the `/var/lib/duatic/snapshots` directory. Installed as the `duatic-robot-logging` Debian package.
 
 ## Installation & Dependencies

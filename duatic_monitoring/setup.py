@@ -19,7 +19,8 @@ setup(
         "console_scripts": [
             "gamepad_battery_node = duatic_monitoring.gamepad_battery_node:main",
             "battery_monitor_node = duatic_monitoring.battery_monitor_node:main",
-            "failure_snapshot_trigger_node = duatic_monitoring.failure_snapshot_trigger_node:main",
+            "failure_snapshot_node = duatic_monitoring.failure_snapshot_node:main",
+            "estop_monitor_node = duatic_monitoring.estop_monitor_node:main",
             "failure_snapshot_logs = duatic_monitoring.failure_snapshot_logs:main",
         ],
     },
