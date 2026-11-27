@@ -44,6 +44,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 from duatic_monitoring.failure_snapshot_node import (
     LOCK_FILE,
@@ -135,6 +136,13 @@ def launch_setup(context):
             package="duatic_monitoring",
             executable="estop_monitor_node",
             name="estop_monitor",
+            parameters=[
+                {
+                    "timeout_threshold_sec": ParameterValue(
+                        LaunchConfiguration("freeze_timeout_sec"), value_type=float
+                    ),
+                }
+            ],
         ),
     ]
 
@@ -158,6 +166,11 @@ def generate_launch_description():
                 "snapshot_disk_bytes",
                 default_value="20000000000",
                 description="Disk space the snapshots under snapshot_root may take, oldest removed first",
+            ),
+            DeclareLaunchArgument(
+                "freeze_timeout_sec",
+                default_value="2.0",
+                description="Seconds the drive data must stay unchanged or silent before a snapshot",
             ),
             OpaqueFunction(function=launch_setup),
         ]

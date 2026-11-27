@@ -120,7 +120,7 @@ class EstopMonitorNode(Node):
     def __init__(self):
         super().__init__("estop_monitor")
 
-        self.declare_parameter("timeout_threshold_sec", 5.0)
+        self.declare_parameter("timeout_threshold_sec", 2.0)
         self.declare_parameter("trigger_service", "failure_snapshot/trigger")
 
         self._timeout_ns = int(self.get_parameter("timeout_threshold_sec").value * NS_PER_SEC)
