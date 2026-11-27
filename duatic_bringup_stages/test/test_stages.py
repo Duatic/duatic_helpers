@@ -26,12 +26,13 @@
 import sys
 
 import pytest
-from launch import LaunchDescription, LaunchService
+from launch import LaunchContext, LaunchDescription, LaunchService
 from launch.actions import (
     DeclareLaunchArgument,
     ExecuteProcess,
     GroupAction,
     IncludeLaunchDescription,
+    LogInfo,
     OpaqueFunction,
     RegisterEventHandler,
     SetEnvironmentVariable,
@@ -39,6 +40,7 @@ from launch.actions import (
 )
 from launch.event_handlers import OnShutdown
 from launch import LaunchDescriptionSource
+from launch.utilities import perform_substitutions
 from launch_ros.actions import PushRosNamespace
 
 from duatic_bringup_stages.stages import Stage, stage_arguments, staged
@@ -117,6 +119,23 @@ def test_stages_start_in_dependency_order():
     assert r.started.index("estimation") > max(r.started.index("core"), r.started.index("imu"))
     assert r.started.index("navigation") > r.started.index("estimation")
     assert not r.aborted
+
+
+def test_the_graph_is_logged_before_anything_starts():
+    r = Recorder()
+    stages = [
+        r.stage("core", 0, configurable=False),
+        r.stage("lidars", 0),
+        r.stage("navigation", 0, after=["core", "lidars"]),
+    ]
+    context = LaunchContext()
+    context.launch_configurations["require_lidars"] = "false"
+    first, *_ = staged(stages).execute(context)
+
+    assert isinstance(first, LogInfo)
+    assert perform_substitutions(context, first.msg) == (
+        "Stages: core; lidars (optional); navigation after core, lidars"
+    )
 
 
 def test_stage_waits_for_its_slowest_dependency():

@@ -276,4 +276,15 @@ def _run(context, stages: List[Stage]):
                 actions += fail(dependent, f"it needs stage '{stage.name}'")
         return actions
 
-    return start_ready()
+    def describe(stage):
+        text = stage.name
+        if stage.after:
+            text += f" after {', '.join(stage.after)}"
+        if not required(stage):
+            text += " (optional)"
+        return text
+
+    return [
+        LogInfo(msg="Stages: " + "; ".join(describe(stage) for stage in stages)),
+        *start_ready(),
+    ]

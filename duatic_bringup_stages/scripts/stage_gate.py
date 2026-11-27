@@ -222,7 +222,7 @@ def main(args=None):
     node = StageGate()
     try:
         rclpy.spin(node)
-    except ExternalShutdownException:
+    except (ExternalShutdownException, KeyboardInterrupt):
         pass
     node.destroy_node()
     # None means the gate was interrupted before it decided
