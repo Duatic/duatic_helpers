@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>duatic_robot_logging</name>
+  <version>0.0.0</version>
+  <description>Robot host log retention: a persistent journal without rate limit or syslog copy, and the directory failure snapshots are written to</description>
+
+  <maintainer email="vpapaspyros@duatic.com">Vaios Papaspyros</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>cmake</buildtool_depend>
+
+  <exec_depend>systemd</exec_depend>
+
+  <export>
+    <build_type>cmake</build_type>
+    <duatic_package_kind>system</duatic_package_kind>
+    <duatic_archive_root>public</duatic_archive_root>
+  </export>
+</package>
