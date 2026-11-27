@@ -151,7 +151,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "snapshot_buffer_bytes",
-                default_value="250000000",
+                default_value="1000000000",
                 description="Size of the in-memory buffer a snapshot is written from",
             ),
             DeclareLaunchArgument(
